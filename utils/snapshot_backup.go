@@ -53,8 +53,8 @@ type StagePod struct {
 // StagePodList - a list of stage pods, with built-in stage pod deduplication
 type StagePodList []StagePod
 
+const TempNamespace string = "dm"
 const (
-	TempNamespace       = "poc"
 	GenerateBackupName  = "generate-backup-"
 	GenerateRestoreName = "generate-restore-"
 	stagePodImage       = "registry.cn-shanghai.aliyuncs.com/jibudata/velero-restic-restore-helper:v1.6.3"
@@ -74,65 +74,28 @@ const (
 	defaultCPU    = "100m"
 )
 
+var dmNamespace string
+
 var f = false
 var t = true
 
-// func main() {
-
-// 	backupName := flag.String("backupName", "", "backup name")
-// 	ns := flag.String("namespace", "", "namespace name")
-// 	flag.Parse()
-// 	if *backupName == "" {
-// 		fmt.Println("You must specify the deployment name.")
-// 		os.Exit(0)
-// 	}
-// 	if *ns == "" {
-// 		fmt.Println("You must specify the namespace name.")
-// 		os.Exit(0)
-// 	}
-
-// 	var scheme *runtime.Scheme = runtime.NewScheme()
-// 	if err := snapshotv1beta1api.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register snapshotv1beta1api to src scheme")
-// 		os.Exit(1)
-// 	}
-// 	if err := core.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register core to scheme")
-// 		os.Exit(1)
-// 	}
-// 	if err := velero.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register core to scheme")
-// 		os.Exit(1)
-// 	}
-
-// 	client, err := k8sclient.New(config.GetConfigOrDie(), k8sclient.Options{Scheme: scheme})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println("=== Step 0. Create temporay namespace")
-// 	createNamespace(client, TempNamespace)
-// 	fmt.Println("=== Step 1. Create new volumesnapshot in temporary namespace")
-// 	var vsrl = createVolumeSnapshot(client, backupName, ns)
-// 	fmt.Println("=== Step 2. Update volumesnapshot content to new volumesnapshot in temporary namespace")
-// 	updateVolumeSnapshotContent(client, vsrl)
-// 	fmt.Println("=== Step 3. Create pvc reference to the new volumesnapshot in temporary namespace")
-// 	createPvcWithVs(client, vsrl, ns)
-// 	fmt.Println("=== Step 4. Recreate pvc to reference pv created in step 3")
-// 	createPvcWithPv(client, vsrl, ns)
-// 	fmt.Println("=== Step 5. Create pod with pvc created in step 4")
-// 	buildStagePod(client, *ns)
-// 	fmt.Println("=== Step 6. Invoke velero to backup the temporary namespace using file system copy")
-// 	_ = backupNamespaceFc(client, *backupName)
-// 	// newBpName := backupNamespaceFc(client, *backupName)
-// 	// fmt.Println("=== Step 7. Delete namespace")
-// 	deleteNamespace(client, *ns)
-// 	// fmt.Println("=== Step 8. Invoke velero to restore the temporary namespace to given namespace")
-// 	// restoreNamespace(client, newBpName, TempNamespace, *ns)
-// 	// fmt.Println("=== Step 9. Delete pod in given namespace")
-// 	// deletePod(client, *ns)
-// 	// fmt.Println("=== Step 10. Invoke velero to restore original namespace")
-// 	// restoreNamespace(client, *backupName, *ns, *ns)
-// }
+func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
+	dmNamespace = TempNamespace + "-" + *backupName
+	fmt.Printf("=== Step 0. Create temporay namespace + %s\n", dmNamespace)
+	createNamespace(client, dmNamespace)
+	fmt.Println("=== Step 1. Create new volumesnapshot in temporary namespace")
+	var vsrl = createVolumeSnapshot(client, backupName, ns)
+	fmt.Println("=== Step 2. Update volumesnapshot content to new volumesnapshot in temporary namespace")
+	updateVolumeSnapshotContent(client, vsrl)
+	fmt.Println("=== Step 3. Create pvc reference to the new volumesnapshot in temporary namespace")
+	createPvcWithVs(client, vsrl, ns)
+	fmt.Println("=== Step 4. Recreate pvc to reference pv created in step 3")
+	createPvcWithPv(client, vsrl, ns)
+	fmt.Println("=== Step 5. Create pod with pvc created in step 4")
+	buildStagePod(client, *ns)
+	fmt.Println("=== Step 6. Invoke velero to backup the temporary namespace using file system copy")
+	_ = backupNamespaceFc(client, *backupName)
+}
 
 // 1: get related VolumeSnapshotResource with backup and namespace
 // 2. delete vs
@@ -171,7 +134,7 @@ func createVolumeSnapshot(client k8sclient.Client, backupName *string, ns *strin
 		// create new volumesnap shot
 		newVs[i] = snapshotv1beta1api.VolumeSnapshot{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      volumeSnapshotName,
 				Labels:    labels,
 			},
@@ -182,10 +145,10 @@ func createVolumeSnapshot(client k8sclient.Client, backupName *string, ns *strin
 				VolumeSnapshotClassName: vs.Spec.VolumeSnapshotClassName,
 			},
 		}
-		fmt.Printf("Created volumesnapshot: %s in %s\n", volumeSnapshotName, TempNamespace)
+		fmt.Printf("Created volumesnapshot: %s in %s\n", volumeSnapshotName, dmNamespace)
 		err = client.Create(context.Background(), &newVs[i])
 		if err != nil {
-			fmt.Printf("Failed to create volume snapshot in %s\n", TempNamespace)
+			fmt.Printf("Failed to create volume snapshot in %s\n", dmNamespace)
 			panic(err)
 		}
 		// construct VolumeSnapshotResource
@@ -205,7 +168,7 @@ func updateVolumeSnapshotContent(client k8sclient.Client, vsrl []VolumeSnapshotR
 		// get volumesnapshot
 		vs := &snapshotv1beta1api.VolumeSnapshot{}
 		err := client.Get(context.Background(), k8sclient.ObjectKey{
-			Namespace: TempNamespace,
+			Namespace: dmNamespace,
 			Name:      vsr.VolumeSnapshotName,
 		}, vs)
 		if err != nil {
@@ -242,7 +205,7 @@ func updateVolumeSnapshotContent(client k8sclient.Client, vsrl []VolumeSnapshotR
 			time.Sleep(time.Duration(5) * time.Second)
 			vs = &snapshotv1beta1api.VolumeSnapshot{}
 			_ = client.Get(context.Background(), k8sclient.ObjectKey{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      vsr.VolumeSnapshotName,
 			}, vs)
 			readyToUse = *vs.Status.ReadyToUse
@@ -262,7 +225,7 @@ func updateVscSnapRef(client k8sclient.Client, vsr VolumeSnapshotResource, uid t
 	}
 	vsc.Spec.VolumeSnapshotRef = core.ObjectReference{}
 	vsc.Spec.VolumeSnapshotRef.Name = vsr.VolumeSnapshotName
-	vsc.Spec.VolumeSnapshotRef.Namespace = TempNamespace
+	vsc.Spec.VolumeSnapshotRef.Namespace = dmNamespace
 	vsc.Spec.VolumeSnapshotRef.UID = uid
 	vsc.Spec.VolumeSnapshotRef.APIVersion = "snapshot.storage.k8s.io/v1beta1"
 	vsc.Spec.VolumeSnapshotRef.Kind = "VolumeSnapshot"
@@ -297,7 +260,7 @@ func createPvcWithVs(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 		var apiGroup = "snapshot.storage.k8s.io"
 		newPvc := &core.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      vsr.PersistentVolumeClaimName,
 			},
 			Spec: core.PersistentVolumeClaimSpec{
@@ -317,10 +280,10 @@ func createPvcWithVs(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 		}
 		err = client.Create(context.Background(), newPvc)
 		if err != nil {
-			fmt.Printf("Failed to create pvc in %s", TempNamespace)
+			fmt.Printf("Failed to create pvc in %s", dmNamespace)
 			panic(err)
 		}
-		fmt.Printf("Created pvc %s in %s \n", vsr.PersistentVolumeClaimName, TempNamespace)
+		fmt.Printf("Created pvc %s in %s \n", vsr.PersistentVolumeClaimName, dmNamespace)
 	}
 }
 
@@ -329,21 +292,21 @@ func createPvcWithPv(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 	for _, vsr := range vsrl {
 		pvc := &core.PersistentVolumeClaim{}
 		err := client.Get(context.TODO(), k8sclient.ObjectKey{
-			Namespace: TempNamespace,
+			Namespace: dmNamespace,
 			Name:      vsr.PersistentVolumeClaimName,
 		}, pvc)
 		if err != nil {
-			fmt.Printf("Failed to get pvc in %s \n", TempNamespace)
+			fmt.Printf("Failed to get pvc in %s \n", dmNamespace)
 			panic(err)
 		}
 		if pvc.Spec.VolumeName == "" {
 			time.Sleep(time.Duration(5) * time.Second)
 			err := client.Get(context.TODO(), k8sclient.ObjectKey{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      vsr.PersistentVolumeClaimName,
 			}, pvc)
 			if err != nil {
-				fmt.Printf("Failed to get pvc in %s \n", TempNamespace)
+				fmt.Printf("Failed to get pvc in %s \n", dmNamespace)
 				panic(err)
 			}
 		}
@@ -353,7 +316,7 @@ func createPvcWithPv(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 		patch := []byte(`{"spec":{"persistentVolumeReclaimPolicy": "Retain"}}`)
 		err = client.Patch(context.Background(), &core.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      pvName,
 			},
 		}, k8sclient.RawPatch(types.MergePatchType, patch))
@@ -375,7 +338,7 @@ func createPvcWithPv(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 		// create pvc with volume
 		newPvc := &core.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      vsr.PersistentVolumeClaimName,
 			},
 			Spec: core.PersistentVolumeClaimSpec{
@@ -391,16 +354,16 @@ func createPvcWithPv(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 		}
 		err = client.Create(context.Background(), newPvc)
 		if err != nil {
-			fmt.Printf("Failed to create pvc in %s", TempNamespace)
+			fmt.Printf("Failed to create pvc in %s", dmNamespace)
 			panic(err)
 		}
-		fmt.Printf("Create pvc %s in %s with pv %s \n", vsr.PersistentVolumeClaimName, TempNamespace, pvName)
+		fmt.Printf("Create pvc %s in %s with pv %s \n", vsr.PersistentVolumeClaimName, dmNamespace, pvName)
 
 		// patch the pv to Delete
 		patch = []byte(`{"spec": {"persistentVolumeReclaimPolicy": "Delete"}}`)
 		err = client.Patch(context.Background(), &core.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: TempNamespace,
+				Namespace: dmNamespace,
 				Name:      pvName,
 			},
 		}, k8sclient.RawPatch(types.MergePatchType, patch))
@@ -415,7 +378,7 @@ func createPvcWithPv(client k8sclient.Client, vsrl []VolumeSnapshotResource, ns 
 func updateObject(client k8sclient.Client, objectName string) {
 	pv := &core.PersistentVolume{}
 	_ = client.Get(context.TODO(), k8sclient.ObjectKey{
-		Namespace: TempNamespace,
+		Namespace: dmNamespace,
 		Name:      objectName,
 	}, pv)
 	pv.Spec.ClaimRef = nil
@@ -424,11 +387,11 @@ func updateObject(client k8sclient.Client, objectName string) {
 		if errors.IsConflict(err) {
 			updateObject(client, objectName)
 		} else {
-			fmt.Printf("Failed to update pv %s to remove reference in %s \n", objectName, TempNamespace)
+			fmt.Printf("Failed to update pv %s to remove reference in %s \n", objectName, dmNamespace)
 			panic(err)
 		}
 	}
-	fmt.Printf("Update pv %s to remove reference in %s \n", objectName, TempNamespace)
+	fmt.Printf("Update pv %s to remove reference in %s \n", objectName, dmNamespace)
 }
 
 // backup poc namespace using velero
@@ -438,7 +401,7 @@ func buildStagePod(client k8sclient.Client, backupNs string) {
 		Namespace: backupNs,
 	}
 	_ = client.List(context.Background(), podList, options)
-	stagePods := BuildStagePods(&podList.Items, stagePodImage, TempNamespace)
+	stagePods := BuildStagePods(&podList.Items, stagePodImage, dmNamespace)
 	for _, stagePod := range stagePods {
 		err := client.Create(context.Background(), &stagePod.Pod)
 		if err != nil {
@@ -448,7 +411,7 @@ func buildStagePod(client k8sclient.Client, backupNs string) {
 	}
 	running := false
 	options = &k8sclient.ListOptions{
-		Namespace: TempNamespace,
+		Namespace: dmNamespace,
 	}
 	for !running {
 		time.Sleep(time.Duration(5) * time.Second)
@@ -463,40 +426,6 @@ func buildStagePod(client k8sclient.Client, backupNs string) {
 		}
 	}
 }
-
-// delete pod
-// func deletePod(client k8sclient.Client, ns string) {
-// 	podList := &core.PodList{}
-// 	options := &k8sclient.ListOptions{
-// 		Namespace: ns,
-// 	}
-// 	err := client.List(context.Background(), podList, options)
-// 	if err != nil {
-// 		fmt.Printf("Failed to get pod list in namespace %s\n", TempNamespace)
-// 		panic(err)
-// 	}
-// 	for _, pod := range podList.Items {
-// 		var name = pod.Name
-// 		err = client.Delete(context.Background(), &pod)
-// 		if err != nil {
-// 			fmt.Printf("Failed to delete pvc %s\n", pod.Name)
-// 			panic(err)
-// 		}
-// 		fmt.Printf("Deleted pod %s \n", name)
-// 	}
-// 	var running = true
-// 	for running {
-// 		time.Sleep(time.Duration(5) * time.Second)
-// 		podList = &core.PodList{}
-// 		options = &k8sclient.ListOptions{
-// 			Namespace: ns,
-// 		}
-// 		_ = client.List(context.Background(), podList, options)
-// 		if len(podList.Items) == 0 {
-// 			running = false
-// 		}
-// 	}
-// }
 
 // Call velero to backup namespace using filesystem copy
 func backupNamespaceFc(client k8sclient.Client, backupName string) string {
@@ -531,7 +460,7 @@ func backupNamespaceFc(client k8sclient.Client, backupName string) string {
 			// IncludeClusterResources: includeClusterResources,
 			StorageLocation:    bp.Spec.StorageLocation,
 			TTL:                bp.Spec.TTL,
-			IncludedNamespaces: []string{TempNamespace},
+			IncludedNamespaces: []string{dmNamespace},
 			Hooks: velero.BackupHooks{
 				Resources: []velero.BackupResourceHookSpec{},
 			},
@@ -725,7 +654,7 @@ func buildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod, pvcVolumes []c
 	newPod := &StagePod{
 		Pod: core.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    TempNamespace,
+				Namespace:    dmNamespace,
 				GenerateName: truncateName("stage-"+ref.Name) + "-",
 			},
 			Spec: core.PodSpec{

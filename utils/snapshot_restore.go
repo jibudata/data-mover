@@ -25,48 +25,20 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// func main() {
-
-// 	backupName := flag.String("backupName", "", "backup name")
-// 	ns := flag.String("namespace", "", "namespace name")
-// 	flag.Parse()
-// 	if *backupName == "" {
-// 		fmt.Println("You must specify the deployment name.")
-// 		os.Exit(0)
-// 	}
-// 	if *ns == "" {
-// 		fmt.Println("You must specify the namespace name.")
-// 		os.Exit(0)
-// 	}
-
-// 	var scheme *runtime.Scheme = runtime.NewScheme()
-// 	if err := snapshotv1beta1api.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register snapshotv1beta1api to src scheme")
-// 		os.Exit(1)
-// 	}
-// 	if err := core.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register core to scheme")
-// 		os.Exit(1)
-// 	}
-// 	if err := velero.AddToScheme(scheme); err != nil {
-// 		fmt.Println("unable to register core to scheme")
-// 		os.Exit(1)
-// 	}
-// 	client, err := k8sclient.New(config.GetConfigOrDie(), k8sclient.Options{Scheme: scheme})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	FcBpName := getFcBackup(client, *backupName)
-// 	fmt.Println(FcBpName)
-// 	fmt.Println("=== Step 7. Delete namespace")
-// 	deleteOrigNamespace(client, *ns)
-// 	fmt.Println("=== Step 8. Invoke velero to restore the temporary namespace to given namespace")
-// 	restoreNamespace(client, FcBpName, TempNamespace, *ns)
-// 	fmt.Println("=== Step 9. Delete pod in given namespace")
-// 	deletePod(client, *ns)
-// 	fmt.Println("=== Step 10. Invoke velero to restore original namespace")
-// 	restoreNamespace(client, *backupName, *ns, *ns)
-// }
+func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
+	dmNamespace = TempNamespace + "-" + *backupName
+	fmt.Println("=== Step 1. Get filesystem copy backup")
+	FcBpName := getFcBackup(client, *backupName)
+	fmt.Println(FcBpName)
+	fmt.Println("=== Step 2. Delete namespace")
+	deleteOrigNamespace(client, *ns)
+	fmt.Println("=== Step 3. Invoke velero to restore the temporary namespace to given namespace")
+	restoreNamespace(client, FcBpName, dmNamespace, *ns)
+	fmt.Println("=== Step 4. Delete pod in given namespace")
+	deletePod(client, *ns)
+	fmt.Println("=== Step 5. Invoke velero to restore original namespace")
+	restoreNamespace(client, *backupName, *ns, *ns)
+}
 
 func deleteOrigNamespace(client k8sclient.Client, ns string) {
 	namespace := core.Namespace{}
@@ -98,7 +70,7 @@ func deletePod(client k8sclient.Client, ns string) {
 	}
 	err := client.List(context.Background(), podList, options)
 	if err != nil {
-		fmt.Printf("Failed to get pod list in namespace %s\n", TempNamespace)
+		fmt.Printf("Failed to get pod list in namespace %s\n", dmNamespace)
 		panic(err)
 	}
 	for _, pod := range podList.Items {
