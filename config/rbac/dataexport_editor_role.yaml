@@ -1,0 +1,24 @@
+# permissions for end users to edit dataexports.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dataexport-editor-role
+rules:
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataexports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataexports/status
+  verbs:
+  - get
