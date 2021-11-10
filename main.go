@@ -14,6 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
+const (
+	ActionBackup  = "backup"
+	ActionRestore = "restore"
+)
+
 func main() {
 
 	backupName := flag.String("backupName", "", "backup name")
@@ -47,9 +52,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if *action == "backup" {
+	if *action == ActionBackup {
 		dmUtil.BackupManager(client, backupName, ns)
-	} else {
+	}
+	if *action == ActionRestore {
 		dmUtil.RestoreManager(client, backupName, ns)
 	}
 }
