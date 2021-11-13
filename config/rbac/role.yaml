@@ -1,0 +1,60 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataexports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataexports/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataexports/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataimports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataimports/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - migration.yinhestor.com
+  resources:
+  - dataimports/status
+  verbs:
+  - get
+  - patch
+  - update

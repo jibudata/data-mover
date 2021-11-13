@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,14 +29,20 @@ type DataImportSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of DataImport. Edit dataimport_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	DataExportRef *corev1.ObjectReference `json:"dataExportRef"`
+	ImportType    string                  `json:"importType"`
+	//DataLocationMap *map[string]DataSource //TBD
 }
 
 // DataImportStatus defines the observed state of DataImport
 type DataImportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Phase               string       `json:"type"`
+	Message             string       `json:"message"`
+	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
+	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
+	//DataLocationMap     map[string]*DataDescriptor `json:"dataLocationMap,omitempty"`
 }
 
 //+kubebuilder:object:root=true
