@@ -41,6 +41,7 @@ type DataExportSpec struct {
 	Policy       ExportPolicy            `json:"policy,omitempty"`
 	BackupJobRef *corev1.ObjectReference `json:"backupJobRef,omitempty"`
 	//DataHandleMap map[string]*DataSource  `json:"dataHandleMap,omitempty"`
+	DataHandleMap map[string]string `json:"dataHandleMap,omitempty"` //TBD
 }
 
 // DataExportStatus defines the observed state of DataExport
@@ -52,6 +53,7 @@ type DataExportStatus struct {
 	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
 	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
 	//DataLocationMap     map[string]*DataDescriptor `json:"dataLocationMap,omitempty"`
+	DataLocationMap map[string]string `json:"dataLocationMap,omitempty"` //TBD
 }
 
 //+kubebuilder:object:root=true

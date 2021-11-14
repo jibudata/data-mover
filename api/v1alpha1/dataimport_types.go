@@ -32,6 +32,7 @@ type DataImportSpec struct {
 	DataExportRef *corev1.ObjectReference `json:"dataExportRef"`
 	ImportType    string                  `json:"importType"`
 	//DataLocationMap *map[string]DataSource //TBD
+	DataLocationMap *map[string]string //TBD
 }
 
 // DataImportStatus defines the observed state of DataImport
@@ -43,6 +44,7 @@ type DataImportStatus struct {
 	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
 	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
 	//DataLocationMap     map[string]*DataDescriptor `json:"dataLocationMap,omitempty"`
+	DataLocationMap map[string]string `json:"dataLocationMap,omitempty"` //TBD
 }
 
 //+kubebuilder:object:root=true

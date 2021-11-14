@@ -19,17 +19,20 @@ package controllers
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	ysv1alpha1 "github.com/jibudata/data-mover/api/v1alpha1"
 )
 
 // DataExportReconciler reconciles a DataExport object
 type DataExportReconciler struct {
 	client.Client
+	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
@@ -49,7 +52,30 @@ type DataExportReconciler struct {
 func (r *DataExportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// your logic here
+	var err error
+
+	// Retrieve the DataExport object to be retrieved
+	dataExport := &ysv1alpha1.DataExport{}
+	err = r.Get(ctx, req.NamespacedName, dataExport)
+	if err != nil {
+		r.Log.Error(err, "")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Report reconcile error.
+	defer func() {
+		if err == nil || errors.IsConflict(err) {
+			return
+		}
+		dataExport.Status.SetReconcileFailed(err)
+		err := r.Update(ctx, dataExport)
+		if err != nil {
+			//r.Log.Error(err, "")
+			return
+		}
+	}()
+
+	// TBD: Main logic
 
 	return ctrl.Result{}, nil
 }
