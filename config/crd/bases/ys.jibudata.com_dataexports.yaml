@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: dataexports.migration.yinhestor.com
+  name: dataexports.ys.jibudata.com
 spec:
-  group: migration.yinhestor.com
+  group: ys.jibudata.com
   names:
     kind: DataExport
     listKind: DataExportList

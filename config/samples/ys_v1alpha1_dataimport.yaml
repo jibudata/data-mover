@@ -1,4 +1,4 @@
-apiVersion: migration.yinhestor.com/v1alpha1
+apiVersion: ys.jibudata.com/v1alpha1
 kind: DataImport
 metadata:
   name: dataimport-sample

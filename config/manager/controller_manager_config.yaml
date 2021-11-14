@@ -8,4 +8,4 @@ webhook:
   port: 9443
 leaderElection:
   leaderElect: true
-  resourceName: 739a0a63.yinhestor.com
+  resourceName: 739a0a63.jibudata.com

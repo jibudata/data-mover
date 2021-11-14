@@ -2,8 +2,8 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/migration.yinhestor.com_dataimports.yaml
-- bases/migration.yinhestor.com_dataexports.yaml
+- bases/ys.jibudata.com_dataimports.yaml
+- bases/ys.jibudata.com_dataexports.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

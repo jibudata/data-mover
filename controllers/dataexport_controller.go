@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	migrationv1alpha1 "github.com/jibudata/data-mover/api/v1alpha1"
+	ysv1alpha1 "github.com/jibudata/data-mover/api/v1alpha1"
 )
 
 // DataExportReconciler reconciles a DataExport object
@@ -33,9 +33,9 @@ type DataExportReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=migration.yinhestor.com,resources=dataexports,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=migration.yinhestor.com,resources=dataexports/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=migration.yinhestor.com,resources=dataexports/finalizers,verbs=update
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -57,6 +57,6 @@ func (r *DataExportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DataExportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&migrationv1alpha1.DataExport{}).
+		For(&ysv1alpha1.DataExport{}).
 		Complete(r)
 }

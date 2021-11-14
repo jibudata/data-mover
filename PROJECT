@@ -1,4 +1,4 @@
-domain: yinhestor.com
+domain: jibudata.com
 layout:
 - go.kubebuilder.io/v3
 projectName: data-mover
@@ -8,8 +8,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: yinhestor.com
-  group: migration
+  domain: jibudata.com
+  group: ys
   kind: DataImport
   path: github.com/jibudata/data-mover/api/v1alpha1
   version: v1alpha1
@@ -17,8 +17,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: yinhestor.com
-  group: migration
+  domain: jibudata.com
+  group: ys
   kind: DataExport
   path: github.com/jibudata/data-mover/api/v1alpha1
   version: v1alpha1
