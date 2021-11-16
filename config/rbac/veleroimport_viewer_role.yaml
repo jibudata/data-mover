@@ -1,13 +1,13 @@
-# permissions for end users to view dataexports.
+# permissions for end users to view dataimports.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: dataexport-viewer-role
+  name: veleroimport-viewer-role
 rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports
+  - dataimports
   verbs:
   - get
   - list
@@ -15,6 +15,6 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports/status
+  - dataimports/status
   verbs:
   - get

@@ -10,16 +10,16 @@ metadata:
 spec:
   group: ys.jibudata.com
   names:
-    kind: DataExport
-    listKind: DataExportList
+    kind: VeleroExport
+    listKind: VeleroExportList
     plural: dataexports
-    singular: dataexport
+    singular: veleroexport
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: DataExport is the Schema for the dataexports API
+        description: VeleroExport is the Schema for the dataexports API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -34,7 +34,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DataExportSpec defines the desired state of DataExport
+            description: VeleroExportSpec defines the desired state of VeleroExport
             properties:
               backupJobRef:
                 description: 'ObjectReference contains enough information to let you
@@ -112,7 +112,7 @@ spec:
             - type
             type: object
           status:
-            description: DataExportStatus defines the observed state of DataExport
+            description: VeleroExportStatus defines the observed state of VeleroExport
             properties:
               completionTimestamp:
                 format: date-time

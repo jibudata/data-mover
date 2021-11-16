@@ -1,13 +1,13 @@
-# permissions for end users to edit dataexports.
+# permissions for end users to edit dataimports.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: dataexport-editor-role
+  name: veleroimport-editor-role
 rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports
+  - dataimports
   verbs:
   - create
   - delete
@@ -19,6 +19,6 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports/status
+  - dataimports/status
   verbs:
   - get

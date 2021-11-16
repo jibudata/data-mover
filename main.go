@@ -78,20 +78,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.DataImportReconciler{
+	if err = (&controllers.VeleroImportReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DataImport"),
+		Log:    ctrl.Log.WithName("controllers").WithName("VeleroImport"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DataImport")
+		setupLog.Error(err, "unable to create controller", "controller", "VeleroImport")
 		os.Exit(1)
 	}
-	if err = (&controllers.DataExportReconciler{
+	if err = (&controllers.VeleroExportReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DataExport"),
+		Log:    ctrl.Log.WithName("controllers").WithName("VeleroExport"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DataExport")
+		setupLog.Error(err, "unable to create controller", "controller", "VeleroExport")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

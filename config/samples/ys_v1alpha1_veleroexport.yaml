@@ -1,7 +1,7 @@
 apiVersion: ys.jibudata.com/v1alpha1
-kind: DataExport
+kind: VeleroExport
 metadata:
-  name: dataexport-sample
+  name: veleroexport-sample
 spec:
   # Add fields here
   foo: bar

@@ -24,19 +24,19 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DataImportSpec defines the desired state of DataImport
-type DataImportSpec struct {
+// VeleroImportSpec defines the desired state of VeleroImport
+type VeleroImportSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	DataExportRef *corev1.ObjectReference `json:"dataExportRef"`
-	ImportType    string                  `json:"importType"`
+	VeleroExportRef *corev1.ObjectReference `json:"dataExportRef"`
+	ImportType      string                  `json:"importType"`
 	//DataLocationMap *map[string]DataSource //TBD
 	DataLocationMap *map[string]string //TBD
 }
 
-// DataImportStatus defines the observed state of DataImport
-type DataImportStatus struct {
+// VeleroImportStatus defines the observed state of VeleroImport
+type VeleroImportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase               string       `json:"type"`
@@ -50,24 +50,24 @@ type DataImportStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// DataImport is the Schema for the dataimports API
-type DataImport struct {
+// VeleroImport is the Schema for the dataimports API
+type VeleroImport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DataImportSpec   `json:"spec,omitempty"`
-	Status DataImportStatus `json:"status,omitempty"`
+	Spec   VeleroImportSpec   `json:"spec,omitempty"`
+	Status VeleroImportStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// DataImportList contains a list of DataImport
-type DataImportList struct {
+// VeleroImportList contains a list of VeleroImport
+type VeleroImportList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DataImport `json:"items"`
+	Items           []VeleroImport `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DataImport{}, &DataImportList{})
+	SchemeBuilder.Register(&VeleroImport{}, &VeleroImportList{})
 }

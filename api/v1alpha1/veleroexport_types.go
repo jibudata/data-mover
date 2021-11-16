@@ -17,66 +17,52 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"time"
-
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type ExportPolicy struct {
-	Frequency string        `json:"frequency,omitempty"`
-	Retention time.Duration `json:"retention,omitempty"`
-	// encryption
-}
-
-// DataExportSpec defines the desired state of DataExport
-type DataExportSpec struct {
+// VeleroExportSpec defines the desired state of VeleroExport
+type VeleroExportSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Type         string                  `json:"type"`
-	Policy       ExportPolicy            `json:"policy,omitempty"`
-	BackupJobRef *corev1.ObjectReference `json:"backupJobRef,omitempty"`
-	//DataHandleMap map[string]*DataSource  `json:"dataHandleMap,omitempty"`
-	DataHandleMap map[string]string `json:"dataHandleMap,omitempty"` //TBD
+	Type string `json:"type"` //TBD
 }
 
-// DataExportStatus defines the observed state of DataExport
-type DataExportStatus struct {
+// VeleroExportStatus defines the observed state of VeleroExport
+type VeleroExportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase               string       `json:"type"`
 	Message             string       `json:"message"`
 	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
 	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
-	//DataLocationMap     map[string]*DataDescriptor `json:"dataLocationMap,omitempty"`
-	DataLocationMap map[string]string `json:"dataLocationMap,omitempty"` //TBD
+	//TBD
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// DataExport is the Schema for the dataexports API
-type DataExport struct {
+// VeleroExport is the Schema for the dataexports API
+type VeleroExport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DataExportSpec   `json:"spec,omitempty"`
-	Status DataExportStatus `json:"status,omitempty"`
+	Spec   VeleroExportSpec   `json:"spec,omitempty"`
+	Status VeleroExportStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// DataExportList contains a list of DataExport
-type DataExportList struct {
+// VeleroExportList contains a list of VeleroExport
+type VeleroExportList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DataExport `json:"items"`
+	Items           []VeleroExport `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DataExport{}, &DataExportList{})
+	SchemeBuilder.Register(&VeleroExport{}, &VeleroExportList{})
 }

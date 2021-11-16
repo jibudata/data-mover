@@ -10,7 +10,7 @@ resources:
   controller: true
   domain: jibudata.com
   group: ys
-  kind: DataImport
+  kind: VeleroImport
   path: github.com/jibudata/data-mover/api/v1alpha1
   version: v1alpha1
 - api:
@@ -19,7 +19,7 @@ resources:
   controller: true
   domain: jibudata.com
   group: ys
-  kind: DataExport
+  kind: VeleroExport
   path: github.com/jibudata/data-mover/api/v1alpha1
   version: v1alpha1
 version: "3"

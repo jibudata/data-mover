@@ -14,10 +14,10 @@ const (
 // TBD
 )
 
-func (r *DataExportStatus) SetReconcileFailed(err error) {
+func (r *VeleroExportStatus) SetReconcileFailed(err error) {
 	// TBD
 }
 
-func (r *DataImportStatus) SetReconcileFailed(err error) {
+func (r *VeleroImportStatus) SetReconcileFailed(err error) {
 	// TBD
 }

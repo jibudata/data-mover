@@ -29,34 +29,34 @@ import (
 	ysv1alpha1 "github.com/jibudata/data-mover/api/v1alpha1"
 )
 
-// DataImportReconciler reconciles a DataImport object
-type DataImportReconciler struct {
+// VeleroExportReconciler reconciles a VeleroExport object
+type VeleroExportReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataimports,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataimports/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataimports/finalizers,verbs=update
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the DataImport object against the actual cluster state, and then
+// the VeleroExport object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
-func (r *DataImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
 	var err error
 
-	// Retrieve the DataExport object to be retrieved
-	dataImport := &ysv1alpha1.DataImport{}
-	err = r.Get(ctx, req.NamespacedName, dataImport)
+	// Retrieve the VeleroExport object to be retrieved
+	dataExport := &ysv1alpha1.VeleroExport{}
+	err = r.Get(ctx, req.NamespacedName, dataExport)
 	if err != nil {
 		r.Log.Error(err, "")
 		return ctrl.Result{Requeue: true}, nil
@@ -67,8 +67,8 @@ func (r *DataImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err == nil || errors.IsConflict(err) {
 			return
 		}
-		dataImport.Status.SetReconcileFailed(err)
-		err := r.Update(ctx, dataImport)
+		dataExport.Status.SetReconcileFailed(err)
+		err := r.Update(ctx, dataExport)
 		if err != nil {
 			//r.Log.Error(err, "")
 			return
@@ -81,8 +81,8 @@ func (r *DataImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DataImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *VeleroExportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ysv1alpha1.DataImport{}).
+		For(&ysv1alpha1.VeleroExport{}).
 		Complete(r)
 }
