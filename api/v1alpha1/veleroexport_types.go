@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,24 +29,25 @@ type VeleroExportSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Type string `json:"type"` //TBD
+	// Velero backupjob name with volume snapshots
+	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 }
 
 // VeleroExportStatus defines the observed state of VeleroExport
 type VeleroExportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase               string       `json:"type"`
-	Message             string       `json:"message"`
-	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
-	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
-	//TBD
+	Phase               string                  `json:"type"`
+	Message             string                  `json:"message"`
+	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupName,omitempty"`
+	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`
+	CompletionTimestamp *metav1.Time            `json:"completionTimestamp,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// VeleroExport is the Schema for the dataexports API
+// VeleroExport is the Schema for the veleroexports API
 type VeleroExport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

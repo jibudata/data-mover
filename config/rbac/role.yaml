@@ -9,7 +9,7 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports
+  - veleroexports
   verbs:
   - create
   - delete
@@ -21,13 +21,13 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports/finalizers
+  - veleroexports/finalizers
   verbs:
   - update
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports/status
+  - veleroexports/status
   verbs:
   - get
   - patch
@@ -35,7 +35,7 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataimports
+  - veleroimports
   verbs:
   - create
   - delete
@@ -47,13 +47,13 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataimports/finalizers
+  - veleroimports/finalizers
   verbs:
   - update
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataimports/status
+  - veleroimports/status
   verbs:
   - get
   - patch

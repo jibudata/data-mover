@@ -36,9 +36,9 @@ type VeleroExportReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=ys.jibudata.com,resources=dataexports/finalizers,verbs=update
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -55,8 +55,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	var err error
 
 	// Retrieve the VeleroExport object to be retrieved
-	dataExport := &ysv1alpha1.VeleroExport{}
-	err = r.Get(ctx, req.NamespacedName, dataExport)
+	veleroExport := &ysv1alpha1.VeleroExport{}
+	err = r.Get(ctx, req.NamespacedName, veleroExport)
 	if err != nil {
 		r.Log.Error(err, "")
 		return ctrl.Result{Requeue: true}, nil
@@ -67,8 +67,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err == nil || errors.IsConflict(err) {
 			return
 		}
-		dataExport.Status.SetReconcileFailed(err)
-		err := r.Update(ctx, dataExport)
+		veleroExport.Status.SetReconcileFailed(err)
+		err := r.Update(ctx, veleroExport)
 		if err != nil {
 			//r.Log.Error(err, "")
 			return

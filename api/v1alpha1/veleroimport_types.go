@@ -29,28 +29,25 @@ type VeleroImportSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	VeleroExportRef *corev1.ObjectReference `json:"dataExportRef"`
-	ImportType      string                  `json:"importType"`
-	//DataLocationMap *map[string]DataSource //TBD
-	DataLocationMap *map[string]string //TBD
+	// Exported velero backupjob name with file system copy
+	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport
 type VeleroImportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase               string       `json:"type"`
-	Message             string       `json:"message"`
-	StartTimestamp      *metav1.Time `json:"startTimestamp,omitempty"`
-	CompletionTimestamp *metav1.Time `json:"completionTimestamp,omitempty"`
-	//DataLocationMap     map[string]*DataDescriptor `json:"dataLocationMap,omitempty"`
-	DataLocationMap map[string]string `json:"dataLocationMap,omitempty"` //TBD
+	Phase               string                  `json:"phase"`
+	Message             string                  `json:"message,omitempty"`
+	VeleroRestoreRef    *corev1.ObjectReference `json:"veleroRestoreRef,omitempty"`
+	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`
+	CompletionTimestamp *metav1.Time            `json:"completionTimestamp,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// VeleroImport is the Schema for the dataimports API
+// VeleroImport is the Schema for the veleroimports API
 type VeleroImport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

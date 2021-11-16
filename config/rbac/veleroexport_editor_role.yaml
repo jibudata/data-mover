@@ -1,4 +1,4 @@
-# permissions for end users to edit dataexports.
+# permissions for end users to edit veleroexports.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports
+  - veleroexports
   verbs:
   - create
   - delete
@@ -19,6 +19,6 @@ rules:
 - apiGroups:
   - ys.jibudata.com
   resources:
-  - dataexports/status
+  - veleroexports/status
   verbs:
   - get
