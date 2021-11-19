@@ -31,6 +31,9 @@ type VeleroImportSpec struct {
 
 	// Exported velero backupjob name with file system copy
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
+	// Names of PVCs need to be imported
+	// +optional
+	PvcNames []string `json:"PvcNames"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport

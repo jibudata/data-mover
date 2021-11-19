@@ -31,6 +31,10 @@ type VeleroExportSpec struct {
 
 	// Velero backupjob name with volume snapshots
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
+
+	// DataSourceMapping is a map of pvc names to volumesnapshot names to be exported.
+	// +optional
+	DataSourceMapping map[string]string `json:"dataSourceMapping"`
 }
 
 // VeleroExportStatus defines the observed state of VeleroExport
