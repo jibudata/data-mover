@@ -18,21 +18,40 @@ import (
 
 	config "github.com/jibudata/data-mover/pkg/config"
 	operation "github.com/jibudata/data-mover/pkg/operation"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
+	logger := ctrl.Log.WithName("DataMover").WithName("RestoreManager")
 	dmNamespace := config.TempNamespace + "-" + *backupName
+	handler := operation.NewOperation(logger, client, dmNamespace)
+
 	fmt.Println("=== Step 1. Get filesystem copy backup")
 	// Call velero to backup namespace using filesystem copy
-	FcBpName := operation.GetVeleroBackup(client, *backupName)
+	FcBpName, err := handler.GetVeleroBackup(*backupName)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(FcBpName)
 	fmt.Println("=== Step 2. Delete original namespace")
-	operation.DeleteNamespace(client, *ns)
+	err = handler.SyncDeleteNamespace(*ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 3. Invoke velero to restore the temporary namespace to given namespace")
-	operation.RestoreNamespace(client, FcBpName, dmNamespace, *ns)
+	_, err = handler.SyncRestoreNamespace(FcBpName, dmNamespace, *ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 4. Delete pod in given namespace")
-	operation.DeletePod(client, *ns)
+	err = handler.DeletePod(*ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 5. Invoke velero to restore original namespace")
-	operation.RestoreNamespace(client, *backupName, *ns, *ns)
+	_, err = handler.SyncRestoreNamespace(*backupName, *ns, *ns)
+	if err != nil {
+		panic(err)
+	}
 }

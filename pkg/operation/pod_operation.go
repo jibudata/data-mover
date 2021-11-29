@@ -79,40 +79,41 @@ func (l *StagePodList) merge(list ...StagePod) {
 }
 
 // backup poc namespace using velero
-func BuildStagePod(client k8sclient.Client, backupNamespace string, dmNamespace string) {
+func (o *Operation) BuildStagePod(backupNamespace string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
 	}
-	_ = client.List(context.Background(), podList, options)
-	stagePods := BuildStagePods(&podList.Items, config.StagePodImage, dmNamespace)
+	_ = o.client.List(context.Background(), podList, options)
+	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, o.dmNamespace)
 	for _, stagePod := range stagePods {
-		err := client.Create(context.Background(), &stagePod.Pod)
+		err := o.client.Create(context.Background(), &stagePod.Pod)
 		if err != nil {
-			fmt.Printf("Failed to crate pod %s\n", stagePod.Pod.Name)
-			panic(err)
+			o.logger.Error(err, fmt.Sprintf("Failed to create pod %s", stagePod.Pod.Name))
+			return err
 		}
 	}
 	running := false
 	options = &k8sclient.ListOptions{
-		Namespace: dmNamespace,
+		Namespace: o.dmNamespace,
 	}
 	for !running {
 		time.Sleep(time.Duration(5) * time.Second)
 		podList = &core.PodList{}
-		_ = client.List(context.Background(), podList, options)
+		_ = o.client.List(context.Background(), podList, options)
 		running = true
 		for _, pod := range podList.Items {
-			fmt.Printf("pod %s status %s\n", pod.Name, pod.Status.Phase)
+			o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
 			if pod.Status.Phase != "Running" {
 				running = false
 			}
 		}
 	}
+	return nil
 }
 
 // BuildStagePods - creates a list of stage pods from a list of pods
-func BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StagePodList {
+func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StagePodList {
 
 	stagePods := StagePodList{}
 	for _, pod := range *podList {
@@ -130,8 +131,8 @@ func BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StageP
 			Name:      pod.GetName(),
 			Namespace: ns,
 		}
-		fmt.Printf("build stage pod %s\n", pod.Name)
-		stagePod := buildStagePodFromPod(podKey, &pod, volumes, stagePodImage, ns)
+		o.logger.Info(fmt.Sprintf("build stage pod %s", pod.Name))
+		stagePod := o.BuildStagePodFromPod(podKey, &pod, volumes, stagePodImage, ns)
 		if stagePod != nil {
 			stagePods.merge(*stagePod)
 		}
@@ -140,7 +141,7 @@ func BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StageP
 }
 
 // Build a stage pod based on existing pod.
-func buildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod, pvcVolumes []core.Volume, stagePodImage string, namespace string) *StagePod {
+func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod, pvcVolumes []core.Volume, stagePodImage string, namespace string) *StagePod {
 
 	// Base pod.
 	newPod := &StagePod{
@@ -201,24 +202,24 @@ func buildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod, pvcVolumes []c
 }
 
 // delete pod
-func DeletePod(client k8sclient.Client, ns string) {
+func (o *Operation) DeletePod(ns string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
 	}
-	err := client.List(context.Background(), podList, options)
+	err := o.client.List(context.Background(), podList, options)
 	if err != nil {
-		fmt.Printf("Failed to get pod list in namespace %s\n", ns)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to get pod list in namespace %s", ns))
+		return err
 	}
 	for _, pod := range podList.Items {
 		var name = pod.Name
-		err = client.Delete(context.Background(), &pod)
+		err = o.client.Delete(context.Background(), &pod)
 		if err != nil {
-			fmt.Printf("Failed to delete pvc %s\n", pod.Name)
-			panic(err)
+			o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
+			return err
 		}
-		fmt.Printf("Deleted pod %s \n", name)
+		o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
 	}
 	var running = true
 	for running {
@@ -227,9 +228,10 @@ func DeletePod(client k8sclient.Client, ns string) {
 		options = &k8sclient.ListOptions{
 			Namespace: ns,
 		}
-		_ = client.List(context.Background(), podList, options)
+		_ = o.client.List(context.Background(), podList, options)
 		if len(podList.Items) == 0 {
 			running = false
 		}
 	}
+	return nil
 }

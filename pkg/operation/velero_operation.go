@@ -12,7 +12,7 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetVeleroBackup(client k8sclient.Client, backupName string) string {
+func (o *Operation) GetVeleroBackup(backupName string) (string, error) {
 	backups := &velero.BackupList{}
 	labels := map[string]string{
 		config.VeleroBackupLabel: backupName,
@@ -21,28 +21,38 @@ func GetVeleroBackup(client k8sclient.Client, backupName string) string {
 		Namespace:     config.VeleroNamespace,
 		LabelSelector: k8slabels.SelectorFromSet(labels),
 	}
-	err := client.List(context.TODO(), backups, options)
+	err := o.client.List(context.TODO(), backups, options)
 	if err != nil {
-		fmt.Printf("Failed to get velero backup plan %s \n", backupName)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
+		return "", err
 	}
 	bp := backups.Items[0]
-	return bp.Name
+	return bp.Name, nil
+}
+
+func (o *Operation) SyncBackupNamespaceFc(backupName string) (string, error) {
+	newBp, err := o.AsyncBackupNamespaceFc(backupName)
+	if err != nil {
+		return "", err
+	}
+	// get velero backup plan
+	o.GetCompletedBackup(newBp.Name)
+	return newBp.Name, nil
 }
 
 // Call velero to backup namespace using filesystem copy
-func BackupNamespaceFc(client k8sclient.Client, backupName string, dmNamespace string) string {
+func (o *Operation) AsyncBackupNamespaceFc(backupName string) (*velero.Backup, error) {
 	// get velero backup plan
 	bp := &velero.Backup{}
-	err := client.Get(context.TODO(), k8sclient.ObjectKey{
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: config.VeleroNamespace,
 		Name:      backupName,
 	}, bp)
 	if err != nil {
-		fmt.Printf("Failed to get velero backup plan %s \n", backupName)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
+		return nil, err
 	}
-	fmt.Printf("Get velero backup plan %s \n", backupName)
+	o.logger.Info(fmt.Sprintf("Get velero backup plan %s", backupName))
 	labels := map[string]string{
 		config.VeleroStorageLabel: bp.Labels[config.VeleroStorageLabel],
 		config.VeleroBackupLabel:  backupName,
@@ -63,7 +73,7 @@ func BackupNamespaceFc(client k8sclient.Client, backupName string, dmNamespace s
 			// IncludeClusterResources: includeClusterResources,
 			StorageLocation:    bp.Spec.StorageLocation,
 			TTL:                bp.Spec.TTL,
-			IncludedNamespaces: []string{dmNamespace},
+			IncludedNamespaces: []string{o.dmNamespace},
 			Hooks: velero.BackupHooks{
 				Resources: []velero.BackupResourceHookSpec{},
 			},
@@ -71,30 +81,28 @@ func BackupNamespaceFc(client k8sclient.Client, backupName string, dmNamespace s
 			DefaultVolumesToRestic: &(config.True),
 		},
 	}
-	err = client.Create(context.TODO(), newBp)
+	err = o.client.Create(context.TODO(), newBp)
 	if err != nil {
-		fmt.Printf("Failed to create velero backup plan %s \n", newBp.Name)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to create velero backup plan %s", newBp.Name))
+		return nil, err
 	}
-	fmt.Printf("Created velero backup plan %s \n", newBp.Name)
-	// get velero backup plan
-	GetCompletedBackup(client, newBp.Name)
-	return newBp.Name
+	o.logger.Info(fmt.Sprintf("Created velero backup plan %s", newBp.Name))
+	return newBp, nil
 }
 
-func GetCompletedBackup(client k8sclient.Client, backupName string) {
+func (o *Operation) GetCompletedBackup(backupName string) {
 	bp := &velero.Backup{}
-	err := client.Get(context.TODO(), k8sclient.ObjectKey{
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: config.VeleroNamespace,
 		Name:      backupName,
 	}, bp)
 	if err != nil {
-		fmt.Printf("Failed to get velero backup plan %s \n", backupName)
+		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
 		panic(err)
 	}
 	if bp.Status.Phase != velero.BackupPhaseCompleted {
 		time.Sleep(time.Duration(5) * time.Second)
-		GetCompletedBackup(client, backupName)
+		o.GetCompletedBackup(backupName)
 	}
 }
 

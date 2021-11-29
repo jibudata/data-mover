@@ -13,10 +13,9 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func CreateNamespace(client k8sclient.Client, ns string) {
-
+func (o *Operation) CreateNamespace(ns string, forceRecreate bool) error {
 	namespace := core.Namespace{}
-	err := client.Get(context.TODO(), k8sclient.ObjectKey{
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: ns,
 		Name:      ns,
 	}, &namespace)
@@ -28,27 +27,31 @@ func CreateNamespace(client k8sclient.Client, ns string) {
 					Name: ns,
 				},
 			}
-			err = client.Create(context.TODO(), &namespace)
+			err = o.client.Create(context.TODO(), &namespace)
 			if err != nil {
-				fmt.Printf("Failed to delete namespace %s \n", ns)
-				panic(err)
+				o.logger.Error(err, fmt.Sprintf("Failed to delete namespace %s", ns))
+				return err
 			}
-			return
+			return nil
 
 		} else {
-			fmt.Printf("Failed to get namespace %s \n", ns)
-			panic(err)
+			o.logger.Error(err, fmt.Sprintf("Failed to get namespace %s", ns))
+			return err
 		}
 	}
-	err = client.Delete(context.TODO(), &namespace)
+	if !forceRecreate {
+		// If namespace exist and do not force recreate namespace, skip recreate
+		return nil
+	}
+	err = o.client.Delete(context.TODO(), &namespace)
 	if err != nil {
-		fmt.Printf("Failed to delete namespace %s \n", ns)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to delete namespace %s", ns))
+		return err
 	}
 	err = nil
 	for err == nil {
 		namespace := core.Namespace{}
-		err = client.Get(context.TODO(), k8sclient.ObjectKey{
+		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
 			Namespace: ns,
 			Name:      ns,
 		}, &namespace)
@@ -59,44 +62,68 @@ func CreateNamespace(client k8sclient.Client, ns string) {
 			Name: ns,
 		},
 	}
-	err = client.Create(context.TODO(), &namespace)
+	err = o.client.Create(context.TODO(), &namespace)
 	if err != nil {
-		fmt.Printf("Failed to create namespace %s \n", ns)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to create namespace %s", ns))
+		return err
 	}
+	return nil
 }
 
-func DeleteNamespace(client k8sclient.Client, ns string) {
-	namespace := core.Namespace{}
-	err := client.Get(context.TODO(), k8sclient.ObjectKey{
+func (o *Operation) AsyncDeleteNamespace(ns string) error {
+	namespace := &core.Namespace{}
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Name: ns,
-	}, &namespace)
+	}, namespace)
 	if err != nil {
-		fmt.Printf("Failed to get namespace %s \n", ns)
+		o.logger.Error(err, fmt.Sprintf("Failed to get namespace %s", ns))
 		// If namespace not exist, skip
 		if serr, ok := err.(*errors.StatusError); ok {
 			if serr.Status().Reason == "NotFound" {
-				fmt.Printf("Skip deleting non-existing namespace %s \n", ns)
-				return
+				o.logger.Error(err, fmt.Sprintf("Skip deleting non-existing namespace %s", ns))
+				return nil
 			}
 		}
-		// TBD: panic to error handling
-		panic(err)
+		return err
 	}
-	client.Delete(context.TODO(), &namespace)
+	o.client.Delete(context.TODO(), namespace)
 	err = nil
 	for err == nil {
 		time.Sleep(time.Duration(15) * time.Second)
 		namespace := core.Namespace{}
-		err = client.Get(context.TODO(), k8sclient.ObjectKey{
+		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
 			Namespace: ns,
 			Name:      ns,
 		}, &namespace)
 	}
+	return nil
+}
+
+func (o *Operation) SyncDeleteNamespace(namespace string) error {
+	err := o.AsyncDeleteNamespace(namespace)
+	if err != nil {
+		return err
+	}
+	err = o.MonitorDeleteNamespace(namespace)
+	return err
+}
+
+func (o *Operation) MonitorDeleteNamespace(namespace string) error {
+	var err error
+	err = nil
+	for err == nil {
+		time.Sleep(time.Duration(15) * time.Second)
+		ns := &core.Namespace{}
+		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
+			Namespace: namespace,
+			Name:      namespace,
+		}, ns)
+	}
+	return err
 }
 
 // Restore original namespace using velero
-func RestoreNamespace(client k8sclient.Client, backupName string, srcNamespace string, tgtNamespace string) string {
+func (o *Operation) AsyncRestoreNamespace(backupName string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)
 	nsMapping[srcNamespace] = tgtNamespace
 	excludedResources := []string{
@@ -122,24 +149,34 @@ func RestoreNamespace(client k8sclient.Client, backupName string, srcNamespace s
 			NamespaceMapping:  nsMapping,
 		},
 	}
-	err := client.Create(context.TODO(), restore)
+	err := o.client.Create(context.TODO(), restore)
 	if err != nil {
-		fmt.Printf("Failed to create velero restore plan %s \n", restore.Name)
-		panic(err)
+		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
+		return nil, err
 	}
-	fmt.Printf("Created velero restore plan %s \n", restore.Name)
+	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restore.Name))
+	return restore, nil
+}
 
-	var restoreName string = restore.Name
+func (o *Operation) SyncRestoreNamespace(backupName string, srcNamespace string, tgtNamespace string) (string, error) {
+	restore, err := o.AsyncRestoreNamespace(backupName, srcNamespace, tgtNamespace)
+	if err != nil {
+		return "", err
+	}
+	o.MonitorRestoreNamespace(restore)
+	return restore.Name, nil
+}
+
+func (o *Operation) MonitorRestoreNamespace(restore *velero.Restore) {
 	status := string(restore.Status.Phase)
 	for status != "Completed" {
 		restore = &velero.Restore{}
 		key := k8sclient.ObjectKey{
-			Name:      restoreName,
+			Name:      restore.Name,
 			Namespace: config.VeleroNamespace,
 		}
-		client.Get(context.Background(), key, restore)
+		o.client.Get(context.Background(), key, restore)
 		time.Sleep(time.Duration(5) * time.Second)
 		status = string(restore.Status.Phase)
 	}
-	return restore.Name
 }

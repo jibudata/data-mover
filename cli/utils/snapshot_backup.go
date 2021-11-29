@@ -18,23 +18,48 @@ import (
 
 	config "github.com/jibudata/data-mover/pkg/config"
 	operation "github.com/jibudata/data-mover/pkg/operation"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
+	logger := ctrl.Log.WithName("DataMover").WithName("BackupManager")
 	dmNamespace := config.TempNamespace + "-" + *backupName
+	handler := operation.NewOperation(logger, client, dmNamespace)
+
 	fmt.Printf("=== Step 0. Create temporay namespace + %s\n", dmNamespace)
-	operation.CreateNamespace(client, dmNamespace)
+	err := handler.CreateNamespace(dmNamespace, true)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 1. Create new volumesnapshot in temporary namespace")
-	var vsrl = operation.CreateVolumeSnapshot(client, backupName, ns, dmNamespace)
+	vsrl, err := handler.CreateVolumeSnapshots(backupName, ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 2. Update volumesnapshot content to new volumesnapshot in temporary namespace")
-	operation.UpdateVolumeSnapshotContent(client, vsrl, dmNamespace)
+	err = handler.SyncUpdateVolumeSnapshotContents(vsrl)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 3. Create pvc reference to the new volumesnapshot in temporary namespace")
-	operation.CreatePvcWithVs(client, vsrl, ns, dmNamespace)
+	err = handler.CreatePvcsWithVs(vsrl, ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 4. Recreate pvc to reference pv created in step 3")
-	operation.CreatePvcWithPv(client, vsrl, ns, dmNamespace)
+	err = handler.CreatePvcsWithPv(vsrl, ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 5. Create pod with pvc created in step 4")
-	operation.BuildStagePod(client, *ns, dmNamespace)
+	err = handler.BuildStagePod(*ns)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("=== Step 6. Invoke velero to backup the temporary namespace using file system copy")
-	_ = operation.BackupNamespaceFc(client, *backupName, dmNamespace)
+	_, err = handler.SyncBackupNamespaceFc(*backupName)
+	if err != nil {
+		panic(err)
+	}
 }

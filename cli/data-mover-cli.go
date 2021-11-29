@@ -10,8 +10,10 @@ import (
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	core "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const (
@@ -33,6 +35,11 @@ func main() {
 		fmt.Println("You must specify the namespace name.")
 		os.Exit(0)
 	}
+
+	opts := zap.Options{
+		Development: true,
+	}
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	var scheme *runtime.Scheme = runtime.NewScheme()
 	if err := snapshotv1beta1api.AddToScheme(scheme); err != nil {
