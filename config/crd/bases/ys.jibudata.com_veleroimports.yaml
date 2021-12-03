@@ -36,6 +36,11 @@ spec:
           spec:
             description: VeleroImportSpec defines the desired state of VeleroImport
             properties:
+              PvcNames:
+                description: Names of PVCs need to be imported
+                items:
+                  type: string
+                type: array
               veleroBackupRef:
                 description: Exported velero backupjob name with file system copy
                 properties:

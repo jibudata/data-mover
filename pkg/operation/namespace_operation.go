@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	config "github.com/jibudata/data-mover/pkg/config"
-	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -120,63 +118,4 @@ func (o *Operation) MonitorDeleteNamespace(namespace string) error {
 		}, ns)
 	}
 	return err
-}
-
-// Restore original namespace using velero
-func (o *Operation) AsyncRestoreNamespace(backupName string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
-	nsMapping := make(map[string]string)
-	nsMapping[srcNamespace] = tgtNamespace
-	excludedResources := []string{
-		"nodes",
-		"events",
-		"events.events.k8s.io",
-		"backups.velero.io",
-		"restores.velero.io",
-		"resticrepositories.velero.io",
-	}
-	if srcNamespace == tgtNamespace {
-		excludedResources = append(excludedResources, "persistentvolumeclaims")
-	}
-	restore := &velero.Restore{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: config.GenerateRestoreName,
-			Namespace:    config.VeleroNamespace,
-		},
-		Spec: velero.RestoreSpec{
-			BackupName:        backupName,
-			RestorePVs:        &(config.True),
-			ExcludedResources: excludedResources,
-			NamespaceMapping:  nsMapping,
-		},
-	}
-	err := o.client.Create(context.TODO(), restore)
-	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
-		return nil, err
-	}
-	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restore.Name))
-	return restore, nil
-}
-
-func (o *Operation) SyncRestoreNamespace(backupName string, srcNamespace string, tgtNamespace string) (string, error) {
-	restore, err := o.AsyncRestoreNamespace(backupName, srcNamespace, tgtNamespace)
-	if err != nil {
-		return "", err
-	}
-	o.MonitorRestoreNamespace(restore)
-	return restore.Name, nil
-}
-
-func (o *Operation) MonitorRestoreNamespace(restore *velero.Restore) {
-	status := string(restore.Status.Phase)
-	for status != "Completed" {
-		restore = &velero.Restore{}
-		key := k8sclient.ObjectKey{
-			Name:      restore.Name,
-			Namespace: config.VeleroNamespace,
-		}
-		o.client.Get(context.Background(), key, restore)
-		time.Sleep(time.Duration(5) * time.Second)
-		status = string(restore.Status.Phase)
-	}
 }

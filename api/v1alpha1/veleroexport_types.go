@@ -32,16 +32,19 @@ type VeleroExportSpec struct {
 	// Velero backupjob name with volume snapshots
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
+	// Namespace that is backuped by velero
+	BackupNamespace string `json:"backupNamespace"`
+
 	// DataSourceMapping is a map of pvc names to volumesnapshot names to be exported.
 	// +optional
-	DataSourceMapping map[string]string `json:"dataSourceMapping"`
+	DataSourceMapping map[string]string `json:"dataSourceMapping,omitempty"`
 }
 
 // VeleroExportStatus defines the observed state of VeleroExport
 type VeleroExportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase               string                  `json:"type"`
+	Phase               string                  `json:"phase"`
 	Message             string                  `json:"message"`
 	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupName,omitempty"`
 	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`

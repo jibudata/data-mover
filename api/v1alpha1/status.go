@@ -1,5 +1,7 @@
 package v1alpha1
 
+import "time"
+
 // Phases
 const (
 	PhaseCreated   = "Created"
@@ -15,7 +17,9 @@ const (
 	PhaseCreatePVClaim              = "CreatePVClaim"
 	PhaseRecreatePVClaim            = "RecreatePVClaim"
 	PhaseCreateStagePod             = "CreateStagePod"
+	PhaseWaitStagePodRunning        = "WaitStagePodRunning"
 	PhaseStartFileSystemCopy        = "StartFileSystemCopy"
+	PhaseWaitFileSystemCopyComplete = "WaitFileSystemCopyComplete"
 
 	// import
 	PhaseRetrieveFileSystemCopy = "RetrieveFileSystemCopy"
@@ -27,7 +31,10 @@ const (
 
 // Messages
 const (
-// TBD
+	FastReQ     = time.Duration(time.Second * 20)
+	PollReQ     = time.Duration(time.Second * 30)
+	NoReQ       = time.Duration(time.Second * 10)
+	LongPollReQ = time.Duration(time.Second * 100)
 )
 
 func (r *VeleroExportStatus) UpdateStatus(phase string, message string) error {

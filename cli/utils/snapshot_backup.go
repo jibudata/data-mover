@@ -27,13 +27,13 @@ func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 	dmNamespace := config.TempNamespace + "-" + *backupName
 	handler := operation.NewOperation(logger, client, dmNamespace)
 
-	fmt.Printf("=== Step 0. Create temporay namespace + %s\n", dmNamespace)
+	fmt.Printf("=== Step 0. Create temporay namespace %s\n", dmNamespace)
 	err := handler.CreateNamespace(dmNamespace, true)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 1. Create new volumesnapshot in temporary namespace")
-	vsrl, err := handler.CreateVolumeSnapshots(backupName, ns)
+	vsrl, err := handler.CreateVolumeSnapshots(*backupName, *ns)
 	if err != nil {
 		panic(err)
 	}
@@ -43,22 +43,22 @@ func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 		panic(err)
 	}
 	fmt.Println("=== Step 3. Create pvc reference to the new volumesnapshot in temporary namespace")
-	err = handler.CreatePvcsWithVs(vsrl, ns)
+	err = handler.CreatePvcsWithVs(vsrl, *ns)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 4. Recreate pvc to reference pv created in step 3")
-	err = handler.CreatePvcsWithPv(vsrl, ns)
+	err = handler.CreatePvcsWithPv(vsrl, *ns)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 5. Create pod with pvc created in step 4")
-	err = handler.BuildStagePod(*ns)
+	err = handler.BuildStagePod(*ns, true)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 6. Invoke velero to backup the temporary namespace using file system copy")
-	_, err = handler.SyncBackupNamespaceFc(*backupName)
+	_, err = handler.SyncBackupNamespaceFc(*backupName, config.VeleroNamespace)
 	if err != nil {
 		panic(err)
 	}

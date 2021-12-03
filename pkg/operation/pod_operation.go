@@ -79,7 +79,7 @@ func (l *StagePodList) merge(list ...StagePod) {
 }
 
 // backup poc namespace using velero
-func (o *Operation) BuildStagePod(backupNamespace string) error {
+func (o *Operation) BuildStagePod(backupNamespace string, wait bool) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
@@ -97,7 +97,7 @@ func (o *Operation) BuildStagePod(backupNamespace string) error {
 	options = &k8sclient.ListOptions{
 		Namespace: o.dmNamespace,
 	}
-	for !running {
+	for !running && wait {
 		time.Sleep(time.Duration(5) * time.Second)
 		podList = &core.PodList{}
 		_ = o.client.List(context.Background(), podList, options)
@@ -110,6 +110,23 @@ func (o *Operation) BuildStagePod(backupNamespace string) error {
 		}
 	}
 	return nil
+}
+
+func (o *Operation) GetStagePodStatus() bool {
+	var running = true
+	options := &k8sclient.ListOptions{
+		Namespace: o.dmNamespace,
+	}
+	podList := &core.PodList{}
+	_ = o.client.List(context.Background(), podList, options)
+	running = true
+	for _, pod := range podList.Items {
+		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
+		if pod.Status.Phase != "Running" {
+			running = false
+		}
+	}
+	return running
 }
 
 // BuildStagePods - creates a list of stage pods from a list of pods

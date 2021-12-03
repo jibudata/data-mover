@@ -33,6 +33,9 @@ import (
 
 	ysv1alpha1 "github.com/jibudata/data-mover/api/v1alpha1"
 	"github.com/jibudata/data-mover/controllers"
+	snapshotv1beta1api "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
+	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	corev1 "k8s.io/api/core/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -75,6 +78,19 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := snapshotv1beta1api.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "unable to register snapshotv1beta1api to src scheme")
+		os.Exit(1)
+	}
+	if err := corev1.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "unable to register core to scheme")
+		os.Exit(1)
+	}
+	if err := velero.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "unable to register core to scheme")
 		os.Exit(1)
 	}
 

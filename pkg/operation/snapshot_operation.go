@@ -30,16 +30,8 @@ type VolumeSnapshotResource struct {
 // 1: get related VolumeSnapshotResource with backup and namespace
 // 2. delete vs
 // 3. create new vs in poc namespace
-func (o *Operation) CreateVolumeSnapshots(backupName *string, ns *string) ([]*VolumeSnapshotResource, error) {
-	volumeSnapshotList := &snapshotv1beta1api.VolumeSnapshotList{}
-	labels := map[string]string{
-		config.VeleroBackupLabel: *backupName,
-	}
-	options := &k8sclient.ListOptions{
-		Namespace:     *ns,
-		LabelSelector: k8slabels.SelectorFromSet(labels),
-	}
-	var err = o.client.List(context.TODO(), volumeSnapshotList, options)
+func (o *Operation) CreateVolumeSnapshots(backupName string, ns string) ([]*VolumeSnapshotResource, error) {
+	volumeSnapshotList, err := o.GetVolumeSnapshotList(backupName, ns)
 	if err != nil {
 		o.logger.Error(err, "Failed to get volume snapshot list")
 		return nil, err
@@ -47,10 +39,13 @@ func (o *Operation) CreateVolumeSnapshots(backupName *string, ns *string) ([]*Vo
 	var vsrl = make([]*VolumeSnapshotResource, len(volumeSnapshotList.Items))
 	var newVs = make([]*snapshotv1beta1api.VolumeSnapshot, len(volumeSnapshotList.Items))
 	var i int
+	labels := map[string]string{
+		config.VeleroBackupLabel: backupName,
+	}
 	for _, vs := range volumeSnapshotList.Items {
-		vsr, newV, err := o.CreateVolumeSnapshot(vs, labels, ns)
+		vsr, newV, err := o.CreateVolumeSnapshot(vs, labels)
 		if err != nil {
-			// TBD: snapshot all or none?
+			o.logger.Error(err, "Failed to create volume snapshot list", "for vs", vs.Name)
 			return nil, err
 		}
 		vsrl[i] = vsr
@@ -70,18 +65,12 @@ func (o *Operation) DeleteVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot) e
 	return nil
 }
 
-func (o *Operation) CreateVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot, labels map[string]string, ns *string) (*VolumeSnapshotResource, *snapshotv1beta1api.VolumeSnapshot, error) {
+func (o *Operation) CreateVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot, labels map[string]string) (*VolumeSnapshotResource, *snapshotv1beta1api.VolumeSnapshot, error) {
 	volumeSnapshotName := vs.Name
 	uid := vs.UID
 	pvc := vs.Spec.Source.PersistentVolumeClaimName
 	volumeSnapshotContentName := vs.Status.BoundVolumeSnapshotContentName
 	o.logger.Info(fmt.Sprintf("name: %s, uid: %s, pvc: %s, content_name: %s", volumeSnapshotName, uid, *pvc, *volumeSnapshotContentName))
-	err := o.DeleteVolumeSnapshot(vs)
-	if err != nil {
-		return nil, nil, err
-	}
-	o.logger.Info(fmt.Sprintf("Deleted volumesnapshot: %s in namesapce %s", volumeSnapshotName, *ns))
-	time.Sleep(time.Duration(2) * time.Second)
 	// create new volumesnap shot
 	newV := &snapshotv1beta1api.VolumeSnapshot{
 		ObjectMeta: metav1.ObjectMeta{
@@ -97,7 +86,7 @@ func (o *Operation) CreateVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot, l
 		},
 	}
 	o.logger.Info(fmt.Sprintf("Created volumesnapshot: %s in %s", volumeSnapshotName, o.dmNamespace))
-	err = o.client.Create(context.Background(), newV)
+	err := o.client.Create(context.Background(), newV)
 	if err != nil {
 		o.logger.Info(fmt.Sprintf("Failed to create volume snapshot in %s", o.dmNamespace))
 		return nil, nil, err
@@ -219,4 +208,57 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID)
 	}
 	o.logger.Info(fmt.Sprintf("Update volumesnapshotcontent %s to remove snapshot reference", vsr.VolumeSnapshotContentName))
 	return nil
+}
+
+func (o *Operation) GetVolumeSnapshotList(backupName string, ns string) (*snapshotv1beta1api.VolumeSnapshotList, error) {
+	volumeSnapshotList := &snapshotv1beta1api.VolumeSnapshotList{}
+	options := &k8sclient.ListOptions{}
+	if backupName != "" {
+		labels := map[string]string{
+			config.VeleroBackupLabel: backupName,
+		}
+		options = &k8sclient.ListOptions{
+			Namespace:     ns,
+			LabelSelector: k8slabels.SelectorFromSet(labels),
+		}
+	} else {
+		options = &k8sclient.ListOptions{
+			Namespace: ns,
+		}
+	}
+	var err = o.client.List(context.TODO(), volumeSnapshotList, options)
+	return volumeSnapshotList, err
+}
+
+func (o *Operation) GetVolumeSnapshotResources(backupName string, backupNs string, tmpNs string) ([]*VolumeSnapshotResource, error) {
+	origVolumeSnapshotList, err := o.GetVolumeSnapshotList(backupName, backupNs)
+	if err != nil {
+		return nil, err
+	}
+	var vsrl = make([]*VolumeSnapshotResource, len(origVolumeSnapshotList.Items))
+	var i int
+	var idMap = make(map[string]int)
+	for _, vs := range origVolumeSnapshotList.Items {
+
+		vsr := &VolumeSnapshotResource{
+			VolumeSnapshotName:        vs.Name,
+			VolumeSnapshotUID:         vs.UID,
+			PersistentVolumeClaimName: *vs.Spec.Source.PersistentVolumeClaimName,
+			VolumeSnapshotContentName: *vs.Status.BoundVolumeSnapshotContentName}
+		vsrl[i] = vsr
+		idMap[*vs.Status.BoundVolumeSnapshotContentName] = i
+		i = i + 1
+	}
+	newVolumeSnapshotList, err := o.GetVolumeSnapshotList("", tmpNs)
+	if err != nil {
+		return nil, err
+	}
+	o.logger.Info("idMap: ", "value", idMap)
+	for _, tmpVs := range newVolumeSnapshotList.Items {
+		o.logger.Info("tmpVs: ", "value", tmpVs)
+		index := idMap[*tmpVs.Spec.Source.VolumeSnapshotContentName]
+		vsrl[index].VolumeSnapshotName = tmpVs.Name
+		vsrl[index].VolumeSnapshotUID = tmpVs.UID
+	}
+	return vsrl, err
 }

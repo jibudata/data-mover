@@ -32,7 +32,7 @@ func (o *Operation) UpdatePV(PvName string) error {
 	return nil
 }
 
-func (o *Operation) CreatePvcsWithVs(vsrl []*VolumeSnapshotResource, ns *string) error {
+func (o *Operation) CreatePvcsWithVs(vsrl []*VolumeSnapshotResource, ns string) error {
 	for _, vsr := range vsrl {
 		err := o.CreatePvcWithVs(vsr, ns)
 		if err != nil {
@@ -46,14 +46,14 @@ func (o *Operation) CreatePvcsWithVs(vsrl []*VolumeSnapshotResource, ns *string)
 // 2. delete original pvc
 // 3. update pv to be availble
 // 4. create new pvc to reference pv
-func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, ns *string) error {
+func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, ns string) error {
 	pvc := &core.PersistentVolumeClaim{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
-		Namespace: *ns,
+		Namespace: ns,
 		Name:      vsr.PersistentVolumeClaimName,
 	}, pvc)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", *ns))
+		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", ns))
 		return err
 	}
 
@@ -88,9 +88,9 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, ns *string) err
 }
 
 // Create pod with pvc
-func (o *Operation) CreatePvcsWithPv(vsrl []*VolumeSnapshotResource, ns *string) error {
+func (o *Operation) CreatePvcsWithPv(vsrl []*VolumeSnapshotResource, ns string) error {
 	for _, vsr := range vsrl {
-		err := o.CreatePvcWithPv(vsr, ns)
+		err := o.CreatePvcWithPv(vsr)
 		if err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func (o *Operation) CreatePvcsWithPv(vsrl []*VolumeSnapshotResource, ns *string)
 }
 
 // Create pod with pvc
-func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, ns *string) error {
+func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource) error {
 	pvc := &core.PersistentVolumeClaim{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: o.dmNamespace,

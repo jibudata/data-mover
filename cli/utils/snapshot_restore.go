@@ -29,18 +29,18 @@ func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
 
 	fmt.Println("=== Step 1. Get filesystem copy backup")
 	// Call velero to backup namespace using filesystem copy
-	FcBpName, err := handler.GetVeleroBackup(*backupName)
+	backup, err := handler.GetVeleroBackup(*backupName, config.VeleroNamespace)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(FcBpName)
+	fmt.Println(backup.Name)
 	fmt.Println("=== Step 2. Delete original namespace")
 	err = handler.SyncDeleteNamespace(*ns)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 3. Invoke velero to restore the temporary namespace to given namespace")
-	_, err = handler.SyncRestoreNamespace(FcBpName, dmNamespace, *ns)
+	_, err = handler.SyncRestoreNamespace(backup.Name, config.VeleroNamespace, dmNamespace, *ns)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
 		panic(err)
 	}
 	fmt.Println("=== Step 5. Invoke velero to restore original namespace")
-	_, err = handler.SyncRestoreNamespace(*backupName, *ns, *ns)
+	_, err = handler.SyncRestoreNamespace(*backupName, config.VeleroNamespace, *ns, *ns)
 	if err != nil {
 		panic(err)
 	}

@@ -36,6 +36,15 @@ spec:
           spec:
             description: VeleroExportSpec defines the desired state of VeleroExport
             properties:
+              backupNamespace:
+                description: Namespace that is backuped by velero
+                type: string
+              dataSourceMapping:
+                additionalProperties:
+                  type: string
+                description: DataSourceMapping is a map of pvc names to volumesnapshot
+                  names to be exported.
+                type: object
               veleroBackupRef:
                 description: Velero backupjob name with volume snapshots
                 properties:
@@ -73,6 +82,7 @@ spec:
                     type: string
                 type: object
             required:
+            - backupNamespace
             - veleroBackupRef
             type: object
           status:
@@ -83,13 +93,13 @@ spec:
                 type: string
               message:
                 type: string
-              startTimestamp:
-                format: date-time
-                type: string
-              type:
+              phase:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying
                   this file'
+                type: string
+              startTimestamp:
+                format: date-time
                 type: string
               veleroBackupName:
                 description: 'ObjectReference contains enough information to let you
@@ -152,7 +162,7 @@ spec:
                 type: object
             required:
             - message
-            - type
+            - phase
             type: object
         type: object
     served: true
