@@ -61,7 +61,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	_ = log.FromContext(ctx)
 
 	var err error
-
+	requeueAfter := 5 * time.Second
 	// Retrieve the VeleroExport object to be retrieved
 	veleroExport := &dmapi.VeleroExport{}
 	err = r.Get(ctx, req.NamespacedName, veleroExport)
@@ -188,14 +188,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		} else {
 			r.updateStatusPhase(r.Client, veleroExport, dmapi.PhaseWaitStagePodRunning, err)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 	}
 	if veleroExport.Status.Phase == dmapi.PhaseWaitStagePodRunning {
 		r.Log.Info("GetStagePodStatus()")
 		running := opt.GetStagePodStatus()
 		if !running {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 		r.updateStatusPhase(r.Client, veleroExport, dmapi.PhaseStartFileSystemCopy, err)
 	}
@@ -218,7 +218,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		// need to update label with
 		r.updateStatusPhase(r.Client, veleroExport, dmapi.PhaseWaitFileSystemCopyComplete, err)
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 	if veleroExport.Status.Phase == dmapi.PhaseWaitFileSystemCopyComplete {
 		bpName := veleroExport.Labels["snapshot-export-backup-name"]
@@ -234,6 +234,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			} else if phase == velero.BackupPhasePartiallyFailed || phase == velero.BackupPhaseFailed {
 				r.updateStatusPhase(r.Client, veleroExport, dmapi.PhaseFailed, err)
 				return ctrl.Result{}, err
+			} else {
+				return ctrl.Result{RequeueAfter: requeueAfter}, nil
 			}
 		}
 	}
