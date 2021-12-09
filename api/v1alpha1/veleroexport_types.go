@@ -45,6 +45,7 @@ type VeleroExportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase               string                  `json:"phase"`
+	State               string                  `json:"state"`
 	Message             string                  `json:"message"`
 	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupName,omitempty"`
 	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`

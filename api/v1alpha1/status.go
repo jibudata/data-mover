@@ -4,14 +4,9 @@ import "time"
 
 // Phases
 const (
-	PhaseCreated   = "Created"
-	PhaseStarted   = "Started"
-	PhaseCleanup   = "Cleanup"
-	PhaseFailed    = "Failed"
-	PhaseCompleted = "Completed"
-
 	// export
-	PhaseCreateTempNamespaceCreated = "CreateTempNamespace"
+	PhasePrecheck                   = "Precheck"
+	PhaseCreateTempNamespace        = "CreateTempNamespace"
 	PhaseCreateVolumeSnapshot       = "CreateVolumeSnapshot"
 	PhaseUpdateSnapshotContent      = "UpdateSnapshotContent"
 	PhaseCreatePVClaim              = "CreatePVClaim"
@@ -20,6 +15,9 @@ const (
 	PhaseWaitStagePodRunning        = "WaitStagePodRunning"
 	PhaseStartFileSystemCopy        = "StartFileSystemCopy"
 	PhaseWaitFileSystemCopyComplete = "WaitFileSystemCopyComplete"
+	PhaseCleanUp                    = "CleanUp"
+	PhaseCompleted                  = "Completed"
+	PhaseWaitCleanUpComplete        = "WaitCleanUpComplete"
 
 	// import
 	PhaseRetrieveFileSystemCopy = "RetrieveFileSystemCopy"
@@ -27,6 +25,19 @@ const (
 	PhaseRestoreTempNamespace   = "RestoreTempNamespace"
 	PhaseDeleteStagePod         = "DeleteStagePod"
 	PhaseRestoreOriginNamespace = "RestoreOriginNamespace"
+)
+
+// Step
+type Step struct {
+	// A phase name.
+	Phase string
+}
+
+// State
+const (
+	StateInProgress = "InProgress"
+	StateFailed     = "Failed"
+	StateCompleted  = "Completed"
 )
 
 // Messages

@@ -101,6 +101,8 @@ spec:
               startTimestamp:
                 format: date-time
                 type: string
+              state:
+                type: string
               veleroBackupName:
                 description: 'ObjectReference contains enough information to let you
                   inspect or modify the referred object. --- New uses of this type
@@ -163,6 +165,7 @@ spec:
             required:
             - message
             - phase
+            - state
             type: object
         type: object
     served: true

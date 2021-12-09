@@ -41,19 +41,11 @@ func (o *Operation) CreateNamespace(ns string, forceRecreate bool) error {
 		// If namespace exist and do not force recreate namespace, skip recreate
 		return nil
 	}
-	err = o.client.Delete(context.TODO(), &namespace)
+
+	err = o.SyncDeleteNamespace(ns)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to delete namespace %s", ns))
+		o.logger.Error(err, fmt.Sprintf("Failed to delete original namespace %s", ns))
 		return err
-	}
-	err = nil
-	for err == nil {
-		namespace := core.Namespace{}
-		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
-			Namespace: ns,
-			Name:      ns,
-		}, &namespace)
-		time.Sleep(time.Duration(15) * time.Second)
 	}
 	namespace = core.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -84,17 +76,8 @@ func (o *Operation) AsyncDeleteNamespace(ns string) error {
 		}
 		return err
 	}
-	o.client.Delete(context.TODO(), namespace)
-	err = nil
-	for err == nil {
-		time.Sleep(time.Duration(15) * time.Second)
-		namespace := core.Namespace{}
-		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
-			Namespace: ns,
-			Name:      ns,
-		}, &namespace)
-	}
-	return nil
+	err = o.client.Delete(context.TODO(), namespace)
+	return err
 }
 
 func (o *Operation) SyncDeleteNamespace(namespace string) error {
@@ -111,11 +94,19 @@ func (o *Operation) MonitorDeleteNamespace(namespace string) error {
 	err = nil
 	for err == nil {
 		time.Sleep(time.Duration(15) * time.Second)
-		ns := &core.Namespace{}
-		err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
-			Namespace: namespace,
-			Name:      namespace,
-		}, ns)
+		_, err = o.GetNamespace(namespace)
 	}
 	return err
+}
+
+func (o *Operation) GetNamespace(namespace string) (*core.Namespace, error) {
+	var err error
+	err = nil
+
+	ns := &core.Namespace{}
+	err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
+		Namespace: namespace,
+		Name:      namespace,
+	}, ns)
+	return ns, err
 }
