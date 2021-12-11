@@ -31,9 +31,13 @@ type VeleroImportSpec struct {
 
 	// Exported velero backupjob name with file system copy
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
+
+	// Namespace that is backuped by velero
+	RestoreNamespace string `json:"backupNamespace"`
+
 	// Names of PVCs need to be imported
 	// +optional
-	PvcNames []string `json:"PvcNames"`
+	PvcNames []string `json:"PvcNames,omitempty"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport
@@ -41,6 +45,7 @@ type VeleroImportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase               string                  `json:"phase"`
+	State               string                  `json:"state"`
 	Message             string                  `json:"message,omitempty"`
 	VeleroRestoreRef    *corev1.ObjectReference `json:"veleroRestoreRef,omitempty"`
 	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`

@@ -96,7 +96,7 @@ func (o *Operation) MonitorDeleteNamespace(namespace string) error {
 		time.Sleep(time.Duration(15) * time.Second)
 		_, err = o.GetNamespace(namespace)
 	}
-	return err
+	return nil
 }
 
 func (o *Operation) GetNamespace(namespace string) (*core.Namespace, error) {

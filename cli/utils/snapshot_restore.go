@@ -45,7 +45,7 @@ func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
 		panic(err)
 	}
 	fmt.Println("=== Step 4. Delete pod in given namespace")
-	err = handler.DeletePod(*ns)
+	err = handler.SyncDeletePod(*ns)
 	if err != nil {
 		panic(err)
 	}

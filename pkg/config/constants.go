@@ -12,6 +12,7 @@ const (
 	VeleroK8sMajorVerAnn     = "velero.io/source-cluster-k8s-major-version"
 	VeleroK8sMinorVerAnn     = "velero.io/source-cluster-k8s-minor-version"
 	SnapshotExportBackupName = "snapshot-export-backup-name"
+	TempNamespacePrefix      = "dm-"
 )
 
 var (
