@@ -26,6 +26,7 @@ import (
 	config "github.com/jibudata/data-mover/pkg/config"
 	ops "github.com/jibudata/data-mover/pkg/operation"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -237,6 +238,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		veleroExport.Labels = labels
 		err = r.Client.Update(ctx, veleroExport)
+		veleroExport.Status.VeleroBackupRef = &corev1.ObjectReference{}
+		veleroExport.Status.VeleroBackupRef.Name = backupPlan.Name
+		veleroExport.Status.VeleroBackupRef.Namespace = backupPlan.Namespace
 		r.updateStatus(r.Client, veleroExport, err)
 		return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 	}
