@@ -12,13 +12,13 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (o *Operation) GetVeleroBackup(backupName string, veleroNs string) (*velero.Backup, error) {
+func (o *Operation) GetVeleroBackup(backupName string, veleroNamespace string) (*velero.Backup, error) {
 	backups := &velero.BackupList{}
 	labels := map[string]string{
 		config.VeleroBackupLabel: backupName,
 	}
 	options := &k8sclient.ListOptions{
-		Namespace:     veleroNs,
+		Namespace:     veleroNamespace,
 		LabelSelector: k8slabels.SelectorFromSet(labels),
 	}
 	err := o.client.List(context.TODO(), backups, options)
@@ -30,11 +30,11 @@ func (o *Operation) GetVeleroBackup(backupName string, veleroNs string) (*velero
 	return &bp, nil
 }
 
-func (o *Operation) GetBackupPlan(backupName string, veleroNs string) (*velero.Backup, error) {
+func (o *Operation) GetBackupPlan(backupName string, veleroNamespace string) (*velero.Backup, error) {
 	backup := &velero.Backup{}
 	keys := k8sclient.ObjectKey{
 		// Namespace: config.VeleroNamespace,
-		Namespace: veleroNs,
+		Namespace: veleroNamespace,
 		Name:      backupName,
 	}
 	err := o.client.Get(context.TODO(), keys, backup)
@@ -45,22 +45,22 @@ func (o *Operation) GetBackupPlan(backupName string, veleroNs string) (*velero.B
 	return backup, nil
 }
 
-func (o *Operation) SyncBackupNamespaceFc(backupName string, veleroNs string) (string, error) {
-	newBp, err := o.AsyncBackupNamespaceFc(backupName, veleroNs)
+func (o *Operation) SyncBackupNamespaceFc(backupName string, veleroNamespace string) (string, error) {
+	newBp, err := o.AsyncBackupNamespaceFc(backupName, veleroNamespace)
 	if err != nil {
 		return "", err
 	}
 	// get velero backup plan
-	o.GetCompletedBackup(newBp.Name, veleroNs)
+	o.GetCompletedBackup(newBp.Name, veleroNamespace)
 	return newBp.Name, nil
 }
 
 // Call velero to backup namespace using filesystem copy
-func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNs string) (*velero.Backup, error) {
+func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace string) (*velero.Backup, error) {
 	// get velero backup plan
 	bp := &velero.Backup{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
-		Namespace: veleroNs,
+		Namespace: veleroNamespace,
 		Name:      backupName,
 	}, bp)
 	if err != nil {
@@ -105,11 +105,11 @@ func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNs string) (
 	return newBp, nil
 }
 
-func (o *Operation) GetBackupStatus(backupName string, veleroNs string) (velero.BackupPhase, error) {
+func (o *Operation) GetBackupStatus(backupName string, veleroNamespace string) (velero.BackupPhase, error) {
 	bp := &velero.Backup{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		// Namespace: config.VeleroNamespace,
-		Namespace: veleroNs,
+		Namespace: veleroNamespace,
 		Name:      backupName,
 	}, bp)
 	if err != nil {
@@ -119,11 +119,11 @@ func (o *Operation) GetBackupStatus(backupName string, veleroNs string) (velero.
 	return bp.Status.Phase, nil
 }
 
-func (o *Operation) GetCompletedBackup(backupName string, veleroNs string) {
+func (o *Operation) GetCompletedBackup(backupName string, veleroNamespace string) {
 	bp := &velero.Backup{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		// Namespace: config.VeleroNamespace,
-		Namespace: veleroNs,
+		Namespace: veleroNamespace,
 		Name:      backupName,
 	}, bp)
 	if err != nil {
@@ -132,12 +132,13 @@ func (o *Operation) GetCompletedBackup(backupName string, veleroNs string) {
 	}
 	if bp.Status.Phase != velero.BackupPhaseCompleted {
 		time.Sleep(time.Duration(5) * time.Second)
-		o.GetCompletedBackup(backupName, veleroNs)
+		o.GetCompletedBackup(backupName, veleroNamespace)
 	}
+	// TBD: add timeout
 }
 
 // Restore original namespace using velero
-func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNs string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
+func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)
 	nsMapping[srcNamespace] = tgtNamespace
 	excludedResources := []string{
@@ -154,7 +155,7 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNs string, sr
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: config.GenerateRestoreName,
-			Namespace:    veleroNs,
+			Namespace:    veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
 			BackupName:        backupName,
@@ -172,25 +173,35 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNs string, sr
 	return restore, nil
 }
 
-func (o *Operation) SyncRestoreNamespace(backupName string, veleroNs string, srcNamespace string, tgtNamespace string) (string, error) {
-	restore, err := o.AsyncRestoreNamespace(backupName, veleroNs, srcNamespace, tgtNamespace)
+func (o *Operation) SyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (string, error) {
+	restore, err := o.AsyncRestoreNamespace(backupName, veleroNamespace, srcNamespace, tgtNamespace)
 	if err != nil {
 		return "", err
 	}
-	o.MonitorRestoreNamespace(restore, veleroNs)
+	o.MonitorRestoreNamespace(restore.Name, veleroNamespace)
 	return restore.Name, nil
 }
 
-func (o *Operation) MonitorRestoreNamespace(restore *velero.Restore, veleroNs string) {
+func (o *Operation) GetVeleroRestore(restoreName string, veleroNamespace string) *velero.Restore {
+	restore := &velero.Restore{}
+	key := k8sclient.ObjectKey{
+		Name:      restoreName,
+		Namespace: veleroNamespace,
+	}
+	o.client.Get(context.Background(), key, restore)
+	return restore
+}
+
+func (o *Operation) IsNamespaceRestored(restoreName string, veleroNamespace string) bool {
+	restore := o.GetVeleroRestore(restoreName, veleroNamespace)
 	status := string(restore.Status.Phase)
-	for status != "Completed" {
-		restore = &velero.Restore{}
-		key := k8sclient.ObjectKey{
-			Name:      restore.Name,
-			Namespace: veleroNs,
-		}
-		o.client.Get(context.Background(), key, restore)
+	return status == string(velero.BackupPhaseCompleted)
+}
+
+func (o *Operation) MonitorRestoreNamespace(restoreName string, veleroNamespace string) {
+	restored := false
+	for !restored {
+		restored = o.IsNamespaceRestored(restoreName, veleroNamespace)
 		time.Sleep(time.Duration(5) * time.Second)
-		status = string(restore.Status.Phase)
 	}
 }

@@ -219,7 +219,31 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 }
 
 // delete pod
-func (o *Operation) DeletePod(ns string) error {
+
+func (o *Operation) IsPodDeleted(ns string) bool {
+	var running = true
+	podList := &core.PodList{}
+	options := &k8sclient.ListOptions{
+		Namespace: ns,
+	}
+	_ = o.client.List(context.Background(), podList, options)
+	if len(podList.Items) == 0 {
+		running = false
+	}
+	return running
+}
+
+func (o *Operation) SyncDeletePod(ns string) error {
+	o.AsyncDeletePod(ns)
+	var running = true
+	for running {
+		time.Sleep(time.Duration(5) * time.Second)
+		running = o.IsPodDeleted(ns)
+	}
+	return nil
+}
+
+func (o *Operation) AsyncDeletePod(ns string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
@@ -237,18 +261,6 @@ func (o *Operation) DeletePod(ns string) error {
 			return err
 		}
 		o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
-	}
-	var running = true
-	for running {
-		time.Sleep(time.Duration(5) * time.Second)
-		podList = &core.PodList{}
-		options = &k8sclient.ListOptions{
-			Namespace: ns,
-		}
-		_ = o.client.List(context.Background(), podList, options)
-		if len(podList.Items) == 0 {
-			running = false
-		}
 	}
 	return nil
 }

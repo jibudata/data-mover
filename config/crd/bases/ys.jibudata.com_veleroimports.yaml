@@ -41,6 +41,9 @@ spec:
                 items:
                   type: string
                 type: array
+              backupNamespace:
+                description: Namespace that is backuped by velero
+                type: string
               veleroBackupRef:
                 description: Exported velero backupjob name with file system copy
                 properties:
@@ -78,6 +81,7 @@ spec:
                     type: string
                 type: object
             required:
+            - backupNamespace
             - veleroBackupRef
             type: object
           status:
@@ -95,6 +99,8 @@ spec:
                 type: string
               startTimestamp:
                 format: date-time
+                type: string
+              state:
                 type: string
               veleroRestoreRef:
                 description: 'ObjectReference contains enough information to let you
@@ -157,6 +163,7 @@ spec:
                 type: object
             required:
             - phase
+            - state
             type: object
         type: object
     served: true

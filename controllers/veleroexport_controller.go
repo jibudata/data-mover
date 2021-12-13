@@ -50,7 +50,7 @@ const (
 	requeueAfterSlow = 5 * time.Second
 )
 
-var steps = []dmapi.Step{
+var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhasePrecheck},
 	{Phase: dmapi.PhaseCreateTempNamespace},
 	{Phase: dmapi.PhaseCreateVolumeSnapshot},
@@ -67,20 +67,7 @@ var steps = []dmapi.Step{
 }
 
 func (r *VeleroExportReconciler) nextPhase(phase string) string {
-	current := -1
-	for i, step := range steps {
-		if step.Phase != phase {
-			continue
-		}
-		current = i
-		break
-	}
-	if current == -1 {
-		return dmapi.PhaseCompleted
-	} else {
-		current += 1
-		return steps[current].Phase
-	}
+	return dmapi.GetNextPhase(phase, veleroExportSteps)
 }
 
 //+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports,verbs=get;list;watch;create;update;patch;delete
@@ -122,9 +109,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}()
 	backupName := veleroExport.Spec.VeleroBackupRef.Name
-	tmpNs := "dm-" + backupName
+	tmpNs := config.TempNamespacePrefix + backupName
 	backupNs := veleroExport.Spec.BackupNamespace
-	veleroNs := veleroExport.Spec.VeleroBackupRef.Namespace
+	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
 	opt := ops.NewOperation(r.Log, r.Client, tmpNs)
 	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
 		// do nothing
@@ -227,8 +214,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
-		r.Log.Info("AsyncBackupNamespaceFc()", "backupName", backupName, "backupNs", veleroNs)
-		backupPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNs)
+		r.Log.Info("AsyncBackupNamespaceFc()", "backupName", backupName, "backupNs", veleroNamespace)
+		backupPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace)
 		if err != nil {
 			r.updateStatus(r.Client, veleroExport, err)
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
@@ -247,7 +234,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroExport.Status.Phase == dmapi.PhaseWaitFileSystemCopyComplete {
 		bpName := veleroExport.Labels[config.SnapshotExportBackupName]
 		r.Log.Info("GetBackupStatus()", "backupPlan", veleroExport.Labels[config.SnapshotExportBackupName])
-		bpPhase, err := opt.GetBackupStatus(bpName, veleroNs)
+		bpPhase, err := opt.GetBackupStatus(bpName, veleroNamespace)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 		} else {
@@ -290,7 +277,7 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 		r.Log.Error(err, "snapshot export failure", "phase", veleroExport.Status.Phase)
 	} else {
 		veleroExport.Status.Phase = r.nextPhase(veleroExport.Status.Phase)
-		if veleroExport.Status.Phase == steps[len(steps)-1].Phase {
+		if veleroExport.Status.Phase == dmapi.GetLastPhase(veleroExportSteps) {
 			veleroExport.Status.State = dmapi.StateCompleted
 			veleroExport.Status.CompletionTimestamp = &metav1.Time{Time: time.Now()}
 		} else {

@@ -1,9 +1,25 @@
 package v1alpha1
 
-import "time"
+import (
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// Step
+type Step struct {
+	// A phase name.
+	Phase string
+}
 
 // Phases
 const (
+	PhaseInitial             = ""
+	PhaseCleanUp             = "CleanUp"
+	PhaseCompleted           = "Completed"
+	PhaseWaitCleanUpComplete = "WaitCleanUpComplete"
+
 	// export
 	PhasePrecheck                   = "Precheck"
 	PhaseCreateTempNamespace        = "CreateTempNamespace"
@@ -15,23 +31,17 @@ const (
 	PhaseWaitStagePodRunning        = "WaitStagePodRunning"
 	PhaseStartFileSystemCopy        = "StartFileSystemCopy"
 	PhaseWaitFileSystemCopyComplete = "WaitFileSystemCopyComplete"
-	PhaseCleanUp                    = "CleanUp"
-	PhaseCompleted                  = "Completed"
-	PhaseWaitCleanUpComplete        = "WaitCleanUpComplete"
 
 	// import
 	PhaseRetrieveFileSystemCopy = "RetrieveFileSystemCopy"
-	PhaseDeleteOriginNamespace  = "DeleteOriginNamespace"
-	PhaseRestoreTempNamespace   = "RestoreTempNamespace"
-	PhaseDeleteStagePod         = "DeleteStagePod"
-	PhaseRestoreOriginNamespace = "RestoreOriginNamespace"
+	//PhaseDeleteOriginNamespace  = "DeleteOriginNamespace" // Not needed in operator, restore missing volumnsnapshot
+	PhaseRestoreTempNamespace     = "RestoreTempNamespace"
+	PhaseRestoringTempNamespace   = "PhaseRestoringTempNamespace"
+	PhaseDeleteStagePod           = "DeleteStagePod"
+	PhaseDeletingStagePod         = "PhaseDeletingStagePod"
+	PhaseRestoreOriginNamespace   = "RestoreOriginNamespace"
+	PhaseRestoringOriginNamespace = "PhaseRestoringOriginNamespace"
 )
-
-// Step
-type Step struct {
-	// A phase name.
-	Phase string
-}
 
 // State
 const (
@@ -40,7 +50,7 @@ const (
 	StateCompleted  = "Completed"
 )
 
-// Messages
+//Requeue Time Definition
 const (
 	FastReQ     = time.Duration(time.Second * 20)
 	PollReQ     = time.Duration(time.Second * 30)
@@ -48,9 +58,44 @@ const (
 	LongPollReQ = time.Duration(time.Second * 100)
 )
 
+func GetNextPhase(phase string, allSteps []Step) string {
+	current := -1
+	for i, step := range allSteps {
+		if step.Phase != phase {
+			continue
+		}
+		current = i
+		break
+	}
+	if current == -1 {
+		return PhaseCompleted
+	} else {
+		current += 1
+		return allSteps[current].Phase
+	}
+}
+
+func GetLastPhase(allSteps []Step) string {
+	return allSteps[len(allSteps)-1].Phase
+}
+
 func (r *VeleroExportStatus) UpdateStatus(phase string, message string) error {
 	// TBD
 	return nil
+}
+
+func (s *VeleroImportStatus) Update(phase string, state string, message string, restoreRef *corev1.ObjectReference) {
+	if state == StateFailed || state == StateCompleted {
+		s.CompletionTimestamp = &metav1.Time{Time: time.Now()}
+		if state == StateFailed {
+			s.Message = message
+		}
+	}
+	if restoreRef != nil {
+		s.VeleroRestoreRef = restoreRef
+	}
+	s.Phase = phase
+	s.State = state
 }
 
 func (r *VeleroExportStatus) SetReconcileFailed(err error) {
