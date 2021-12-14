@@ -36,12 +36,12 @@ spec:
           spec:
             description: VeleroImportSpec defines the desired state of VeleroImport
             properties:
-              PvcNames:
+              pvcNames:
                 description: Names of PVCs need to be imported
                 items:
                   type: string
                 type: array
-              backupNamespace:
+              restoreNamespace:
                 description: Namespace that is backuped by velero
                 type: string
               veleroBackupRef:
@@ -81,7 +81,7 @@ spec:
                     type: string
                 type: object
             required:
-            - backupNamespace
+            - restoreNamespace
             - veleroBackupRef
             type: object
           status:

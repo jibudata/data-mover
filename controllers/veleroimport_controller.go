@@ -225,7 +225,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
-		fmt.Println("Start invoking velero to restore original namespace ...")
+		r.Log.Info("Start invoking velero to restore original namespace ...")
 		restore, err := handler.AsyncRestoreNamespace(backupName, config.VeleroNamespace, restoreNamespace, restoreNamespace)
 		if err != nil {
 			r.Log.Error(err, fmt.Sprintf("Failed to restore original namespace %s: %s", restoreNamespace, err.Error()))

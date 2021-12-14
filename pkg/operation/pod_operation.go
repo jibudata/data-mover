@@ -230,7 +230,7 @@ func (o *Operation) IsPodDeleted(ns string) bool {
 	if len(podList.Items) == 0 {
 		running = false
 	}
-	return running
+	return !running
 }
 
 func (o *Operation) SyncDeletePod(ns string) error {
