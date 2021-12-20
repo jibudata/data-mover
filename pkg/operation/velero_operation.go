@@ -137,6 +137,49 @@ func (o *Operation) GetCompletedBackup(backupName string, veleroNamespace string
 	// TBD: add timeout
 }
 
+func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (*velero.Restore, error) {
+
+	excludedResources := []string{
+		"nodes",
+		"events",
+		"events.events.k8s.io",
+		"backups.velero.io",
+		"restores.velero.io",
+		"resticrepositories.velero.io",
+	}
+	if excludePV {
+		excludedResources = append(excludedResources, "persistentvolumeclaims")
+	}
+	restore := &velero.Restore{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: config.GenerateRestoreName,
+			Namespace:    veleroNamespace,
+		},
+		Spec: velero.RestoreSpec{
+			BackupName:        backupName,
+			RestorePVs:        &(config.True),
+			ExcludedResources: excludedResources,
+			NamespaceMapping:  namespaceMapping,
+		},
+	}
+	err := o.client.Create(context.TODO(), restore)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
+		return nil, err
+	}
+	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restore.Name))
+	return restore, nil
+}
+
+func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (string, error) {
+	restore, err := o.AsyncRestoreNamespaces(backupName, veleroNamespace, namespaceMapping, excludePV)
+	if err != nil {
+		return "", err
+	}
+	o.MonitorRestoreNamespace(restore.Name, veleroNamespace)
+	return restore.Name, nil
+}
+
 // Restore original namespace using velero
 func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)

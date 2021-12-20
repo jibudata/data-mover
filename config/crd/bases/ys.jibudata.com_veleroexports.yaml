@@ -36,14 +36,23 @@ spec:
           spec:
             description: VeleroExportSpec defines the desired state of VeleroExport
             properties:
-              backupNamespace:
-                description: Namespace that is backuped by velero
-                type: string
               dataSourceMapping:
                 additionalProperties:
                   type: string
                 description: DataSourceMapping is a map of pvc names to volumesnapshot
                   names to be exported.
+                type: object
+              includedNamespaces:
+                description: Namespace that is backuped by velero
+                items:
+                  type: string
+                type: array
+              policy:
+                properties:
+                  retention:
+                    description: Requency of the export, default is 1 export per snapshot
+                    format: int64
+                    type: integer
                 type: object
               veleroBackupRef:
                 description: Velero backupjob name with volume snapshots
@@ -82,7 +91,6 @@ spec:
                     type: string
                 type: object
             required:
-            - backupNamespace
             - veleroBackupRef
             type: object
           status:

@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	memory        = "memory"
-	cpu           = "cpu"
-	defaultMemory = "128Mi"
-	defaultCPU    = "100m"
+	memory             = "memory"
+	cpu                = "cpu"
+	defaultMemory      = "128Mi"
+	defaultCPU         = "100m"
+	stagePodNamePrefix = "stage-"
 )
 
 func truncateName(name string) string {
@@ -186,7 +187,7 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 		Pod: core.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:    namespace,
-				GenerateName: truncateName("stage-"+ref.Name) + "-",
+				GenerateName: truncateName(stagePodNamePrefix+ref.Name) + "-",
 			},
 			Spec: core.PodSpec{
 				Containers: []core.Container{},
@@ -241,30 +242,33 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 
 // delete pod
 
-func (o *Operation) IsPodDeleted(ns string) bool {
-	var running = true
+func (o *Operation) IsStagePodDeleted(ns string) bool {
+	var running = false
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
 	}
 	_ = o.client.List(context.Background(), podList, options)
-	if len(podList.Items) == 0 {
-		running = false
+	for _, pod := range podList.Items {
+		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
+			running = true
+			break
+		}
 	}
 	return !running
 }
 
-func (o *Operation) SyncDeletePod(ns string) error {
-	o.AsyncDeletePod(ns)
+func (o *Operation) SyncDeleteStagePod(ns string) error {
+	o.AsyncDeleteStagePod(ns)
 	var running = true
 	for running {
 		time.Sleep(time.Duration(5) * time.Second)
-		running = o.IsPodDeleted(ns)
+		running = o.IsStagePodDeleted(ns)
 	}
 	return nil
 }
 
-func (o *Operation) AsyncDeletePod(ns string) error {
+func (o *Operation) AsyncDeleteStagePod(ns string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
@@ -276,12 +280,14 @@ func (o *Operation) AsyncDeletePod(ns string) error {
 	}
 	for _, pod := range podList.Items {
 		var name = pod.Name
-		err = o.client.Delete(context.Background(), &pod)
-		if err != nil {
-			o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
-			return err
+		if strings.HasPrefix(name, stagePodNamePrefix) {
+			err = o.client.Delete(context.Background(), &pod)
+			if err != nil {
+				o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
+				return err
+			}
+			o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
 		}
-		o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
 	}
 	return nil
 }

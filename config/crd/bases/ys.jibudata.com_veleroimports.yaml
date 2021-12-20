@@ -36,14 +36,15 @@ spec:
           spec:
             description: VeleroImportSpec defines the desired state of VeleroImport
             properties:
+              namespaceMapping:
+                additionalProperties:
+                  type: string
+                type: object
               pvcNames:
                 description: Names of PVCs need to be imported
                 items:
                   type: string
                 type: array
-              restoreNamespace:
-                description: Namespace that is backuped by velero
-                type: string
               veleroBackupRef:
                 description: Exported velero backupjob name with file system copy
                 properties:
@@ -81,7 +82,6 @@ spec:
                     type: string
                 type: object
             required:
-            - restoreNamespace
             - veleroBackupRef
             type: object
           status:

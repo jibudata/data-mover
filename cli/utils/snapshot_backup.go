@@ -62,4 +62,10 @@ func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("=== Step 7. Clean up temporary namesnapce")
+	err = handler.SyncDeleteNamespace(dmNamespace)
+	if err != nil {
+		panic(err)
+	}
 }
