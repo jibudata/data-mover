@@ -6,15 +6,16 @@ import (
 )
 
 type Operation struct {
-	logger      logr.Logger
-	client      k8sclient.Client
-	dmNamespace string
+	logger logr.Logger
+	client k8sclient.Client
+	// dmNamespace string
 }
 
-func NewOperation(logger logr.Logger, client k8sclient.Client, dmNamespace string) *Operation {
+// func NewOperation(logger logr.Logger, client k8sclient.Client, dmNamespace string) *Operation {
+func NewOperation(logger logr.Logger, client k8sclient.Client) *Operation {
 	return &Operation{
-		logger:      logger,
-		client:      client,
-		dmNamespace: dmNamespace,
+		logger: logger,
+		client: client,
+		// dmNamespace: dmNamespace,
 	}
 }

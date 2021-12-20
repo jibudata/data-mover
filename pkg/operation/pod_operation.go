@@ -79,13 +79,13 @@ func (l *StagePodList) merge(list ...StagePod) {
 }
 
 // backup poc namespace using velero
-func (o *Operation) BuildStagePod(backupNamespace string, wait bool) error {
+func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
 	}
 	_ = o.client.List(context.Background(), podList, options)
-	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, o.dmNamespace)
+	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, tempNs)
 	for _, stagePod := range stagePods {
 		err := o.client.Create(context.Background(), &stagePod.Pod)
 		if err != nil {
@@ -95,7 +95,7 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool) error {
 	}
 	running := false
 	options = &k8sclient.ListOptions{
-		Namespace: o.dmNamespace,
+		Namespace: tempNs,
 	}
 	for !running && wait {
 		time.Sleep(time.Duration(5) * time.Second)
@@ -112,15 +112,14 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool) error {
 	return nil
 }
 
-func (o *Operation) GetStagePodStatus() bool {
+func (o *Operation) GetStagePodStatus(tempNs string) bool {
 	var running = true
-	options := &k8sclient.ListOptions{
-		Namespace: o.dmNamespace,
+	podList, err := o.getPodList(tempNs)
+	if err != nil {
+		return false
 	}
-	podList := &core.PodList{}
-	_ = o.client.List(context.Background(), podList, options)
-	running = true
-	for _, pod := range podList.Items {
+
+	for _, pod := range podList {
 		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
 		if pod.Status.Phase != "Running" {
 			running = false
@@ -129,11 +128,33 @@ func (o *Operation) GetStagePodStatus() bool {
 	return running
 }
 
+func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
+	options := &k8sclient.ListOptions{
+		Namespace: ns,
+	}
+	podList := &core.PodList{}
+	err := o.client.List(context.Background(), podList, options)
+	return podList.Items, err
+
+}
+
 // BuildStagePods - creates a list of stage pods from a list of pods
 func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StagePodList {
 
+	existingPods, _ := o.getPodList(ns)
+	var existingPodMap = make(map[string]bool)
+	if existingPods != nil && len(existingPods) > 0 {
+		for _, pod := range existingPods {
+			name := pod.Name[:strings.LastIndex(pod.Name, "-")-1]
+			existingPodMap[name] = true
+		}
+	}
+
 	stagePods := StagePodList{}
 	for _, pod := range *podList {
+		if existingPodMap[pod.Name] {
+			continue
+		}
 		volumes := []core.Volume{}
 		for _, volume := range pod.Spec.Volumes {
 			if volume.PersistentVolumeClaim == nil {

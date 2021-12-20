@@ -45,8 +45,8 @@ func (o *Operation) GetBackupPlan(backupName string, veleroNamespace string) (*v
 	return backup, nil
 }
 
-func (o *Operation) SyncBackupNamespaceFc(backupName string, veleroNamespace string) (string, error) {
-	newBp, err := o.AsyncBackupNamespaceFc(backupName, veleroNamespace)
+func (o *Operation) SyncBackupNamespaceFc(backupName string, veleroNamespace string, includedNamespaces []string) (string, error) {
+	newBp, err := o.AsyncBackupNamespaceFc(backupName, veleroNamespace, includedNamespaces)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +56,7 @@ func (o *Operation) SyncBackupNamespaceFc(backupName string, veleroNamespace str
 }
 
 // Call velero to backup namespace using filesystem copy
-func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace string) (*velero.Backup, error) {
+func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace string, includedNamespaces []string) (*velero.Backup, error) {
 	// get velero backup plan
 	bp := &velero.Backup{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
@@ -88,7 +88,7 @@ func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace st
 			// IncludeClusterResources: includeClusterResources,
 			StorageLocation:    bp.Spec.StorageLocation,
 			TTL:                bp.Spec.TTL,
-			IncludedNamespaces: []string{o.dmNamespace},
+			IncludedNamespaces: includedNamespaces,
 			Hooks: velero.BackupHooks{
 				Resources: []velero.BackupResourceHookSpec{},
 			},

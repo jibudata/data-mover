@@ -21,10 +21,14 @@ const (
 	PhaseWaitCleanUpComplete = "WaitCleanUpComplete"
 
 	// export
+	PhaseCreated                    = ""
 	PhasePrecheck                   = "Precheck"
+	PhasePrepare                    = "Prepare"
+	PhaseWaitPrepareComplete        = "WaitPrepareComplete"
 	PhaseCreateTempNamespace        = "CreateTempNamespace"
 	PhaseCreateVolumeSnapshot       = "CreateVolumeSnapshot"
 	PhaseUpdateSnapshotContent      = "UpdateSnapshotContent"
+	PhaseCheckSnapshotContent       = "CheckSnapshotContent"
 	PhaseCreatePVClaim              = "CreatePVClaim"
 	PhaseRecreatePVClaim            = "RecreatePVClaim"
 	PhaseCreateStagePod             = "CreateStagePod"

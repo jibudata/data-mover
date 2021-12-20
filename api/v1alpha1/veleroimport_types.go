@@ -33,7 +33,7 @@ type VeleroImportSpec struct {
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
 	// Namespace that is backuped by velero
-	RestoreNamespace string `json:"backupNamespace"`
+	IncludedNamespaces []string `json:"includedNamespaces"`
 
 	// Names of PVCs need to be imported
 	// +optional

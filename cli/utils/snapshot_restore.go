@@ -25,7 +25,7 @@ import (
 func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
 	logger := ctrl.Log.WithName("DataMover").WithName("RestoreManager")
 	dmNamespace := config.TempNamespace + "-" + *backupName
-	handler := operation.NewOperation(logger, client, dmNamespace)
+	handler := operation.NewOperation(logger, client)
 
 	fmt.Println("=== Step 1. Get filesystem copy backup")
 	// Call velero to backup namespace using filesystem copy

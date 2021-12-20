@@ -25,7 +25,7 @@ import (
 func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 	logger := ctrl.Log.WithName("DataMover").WithName("BackupManager")
 	dmNamespace := config.TempNamespace + "-" + *backupName
-	handler := operation.NewOperation(logger, client, dmNamespace)
+	handler := operation.NewOperation(logger, client)
 
 	fmt.Printf("=== Step 0. Create temporay namespace %s\n", dmNamespace)
 	err := handler.CreateNamespace(dmNamespace, true)
@@ -33,32 +33,32 @@ func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 		panic(err)
 	}
 	fmt.Println("=== Step 1. Create new volumesnapshot in temporary namespace")
-	vsrl, err := handler.CreateVolumeSnapshots(*backupName, *ns)
+	vsrl, err := handler.CreateVolumeSnapshots(*backupName, *ns, dmNamespace)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 2. Update volumesnapshot content to new volumesnapshot in temporary namespace")
-	err = handler.SyncUpdateVolumeSnapshotContents(vsrl)
+	err = handler.SyncUpdateVolumeSnapshotContents(vsrl, dmNamespace)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 3. Create pvc reference to the new volumesnapshot in temporary namespace")
-	err = handler.CreatePvcsWithVs(vsrl, *ns)
+	err = handler.CreatePvcsWithVs(vsrl, *ns, dmNamespace)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 4. Recreate pvc to reference pv created in step 3")
-	err = handler.CreatePvcsWithPv(vsrl, *ns)
+	err = handler.CreatePvcsWithPv(vsrl, *ns, dmNamespace)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 5. Create pod with pvc created in step 4")
-	err = handler.BuildStagePod(*ns, true)
+	err = handler.BuildStagePod(*ns, true, dmNamespace)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("=== Step 6. Invoke velero to backup the temporary namespace using file system copy")
-	_, err = handler.SyncBackupNamespaceFc(*backupName, config.VeleroNamespace)
+	_, err = handler.SyncBackupNamespaceFc(*backupName, config.VeleroNamespace, []string{dmNamespace})
 	if err != nil {
 		panic(err)
 	}

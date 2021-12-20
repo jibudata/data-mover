@@ -47,14 +47,18 @@ type VeleroExportReconciler struct {
 
 const (
 	requeueAfterFast = 5 * time.Second
-	requeueAfterSlow = 5 * time.Second
+	requeueAfterSlow = 20 * time.Second
 )
 
 var veleroExportSteps = []dmapi.Step{
+	{Phase: dmapi.PhaseCreated},
 	{Phase: dmapi.PhasePrecheck},
+	{Phase: dmapi.PhasePrepare},
+	{Phase: dmapi.PhaseWaitPrepareComplete},
 	{Phase: dmapi.PhaseCreateTempNamespace},
 	{Phase: dmapi.PhaseCreateVolumeSnapshot},
 	{Phase: dmapi.PhaseUpdateSnapshotContent},
+	{Phase: dmapi.PhaseCheckSnapshotContent},
 	{Phase: dmapi.PhaseCreatePVClaim},
 	{Phase: dmapi.PhaseRecreatePVClaim},
 	{Phase: dmapi.PhaseCreateStagePod},
@@ -108,132 +112,243 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return
 		}
 	}()
+
 	backupName := veleroExport.Spec.VeleroBackupRef.Name
-	tmpNs := config.TempNamespacePrefix + backupName
-	backupNs := veleroExport.Spec.BackupNamespace
+	// tmpNs := config.TempNamespacePrefix + backupName
+	includedNamespaces := veleroExport.Spec.IncludedNamespaces
 	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
-	opt := ops.NewOperation(r.Log, r.Client, tmpNs)
+	opt := ops.NewOperation(r.Log, r.Client)
 	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
 		// do nothing
 		return ctrl.Result{}, nil
 	}
-	// precheck
-	if veleroExport.Status.Phase == "" || veleroExport.Status.Phase == dmapi.PhasePrecheck {
+	_ = r.validatePolicy(veleroExport)
+
+	// check retention
+	retention := veleroExport.Spec.Policy.Retention * time.Hour
+	if veleroExport.Status.StartTimestamp != nil {
+		stop := veleroExport.Status.StartTimestamp.Time.Add(retention)
+		now := time.Now()
+		if time.Now().After(stop) {
+			r.Log.Info("backupjob expired", "now", now)
+			err = r.deleteVeleroExport(veleroExport)
+			if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
+			return ctrl.Result{}, nil
+		}
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCreated {
 		r.Log.Info("snapshot export started")
-		veleroExport.Status = dmapi.VeleroExportStatus{}
-		veleroExport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
-		veleroExport.Status.Phase = dmapi.PhasePrecheck
-		err = r.Precheck(r.Client, veleroExport, opt)
+		r.updateStatus(r.Client, veleroExport, err)
+	}
+
+	// precheck
+	if veleroExport.Status.Phase == dmapi.PhasePrecheck {
+
+		err = r.precheck(r.Client, veleroExport, opt)
 		r.updateStatus(r.Client, veleroExport, err)
 		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+			return ctrl.Result{Requeue: true}, err
 		}
 	}
+
+	// delete the temparory namespace already exists
+	if veleroExport.Status.Phase == dmapi.PhasePrepare {
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			err = opt.AsyncDeleteNamespace(tmpNamespace)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, nil)
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseWaitPrepareComplete {
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			_, err = opt.GetNamespace(tmpNamespace)
+			if err != nil && errors.IsNotFound(err) {
+				continue
+			} else {
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, nil)
+	}
+
+	// create temp namespaces
 	if veleroExport.Status.Phase == dmapi.PhaseCreateTempNamespace {
-		r.Log.Info("CreateNamespace()", "tmpNs", tmpNs)
-		err = opt.CreateNamespace(tmpNs, true)
-		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+		for _, namespace := range includedNamespaces {
+			err = opt.CreateNamespace(namespace, false)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
+		r.updateStatus(r.Client, veleroExport, nil)
 	}
-	vsList, err := opt.GetVolumeSnapshotList(backupName, backupNs)
-	if err != nil {
-		r.updateStatus(r.Client, veleroExport, err)
-		return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-	}
-	var vsrl = make([]*ops.VolumeSnapshotResource, len(vsList.Items))
+
 	if veleroExport.Status.Phase == dmapi.PhaseCreateVolumeSnapshot {
-		r.Log.Info("CreateVolumeSnapshots()", "backupName", backupName, "backupNs", backupNs)
-		vsrl, err = opt.CreateVolumeSnapshots(backupName, backupNs)
-		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+
+		for _, namespace := range includedNamespaces {
+			// get type VolumeSnapshotResource struct {
+			//     VolumeSnapshotName string
+			//     VolumeSnapshotUID  types.UID
+			//     PersistentVolumeClaimName string
+			//     VolumeSnapshotContentName string
+			//     VolumeSnapshotContentName string
+			// }
+			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+				continue
+			}
+
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			vsrl, err := opt.CreateVolumeSnapshots(backupName, namespace, tmpNamespace)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{Requeue: true}, err
+			}
+
+			if veleroExport.Annotations == nil {
+				veleroExport.Annotations = make(map[string]string)
+			}
+			vsrString := ""
+			for _, vsr := range vsrl {
+				vsrString = vsr.VolumeSnapshotName + "," + string(vsr.VolumeSnapshotUID) + "," + vsr.PersistentVolumeClaimName + "," + vsr.VolumeSnapshotContentName
+				vsrString += ";"
+			}
+			veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] = vsrString[:len(vsrString)-1]
+			err = r.Client.Update(context.Background(), veleroExport)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
+		r.updateStatus(r.Client, veleroExport, err)
 	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseUpdateSnapshotContent {
-		r.Log.Info("SyncUpdateVolumeSnapshotContents()", "vsrl", vsrl)
-		if vsrl[0] == nil {
-			vsrl, err = opt.GetVolumeSnapshotResources(backupName, backupNs, tmpNs)
-			if err != nil {
-				r.updateStatus(r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+				// how to check snapshot content has already been updated?
+				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, tmpNamespace)
+				if err != nil {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
 			}
 		}
-		err = opt.SyncUpdateVolumeSnapshotContents(vsrl)
 		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-		}
 	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCheckSnapshotContent {
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+				ready, err := opt.IsVolumeSnapshotContentReady(vsrl, tmpNamespace)
+				if !ready {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+				if !ready {
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, err)
+	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseCreatePVClaim {
-		r.Log.Info("CreatePvcsWithVs()", "vsrl", vsrl, "backupNs", backupNs)
-		if vsrl[0] == nil {
-			vsrl, err = opt.GetVolumeSnapshotResources(backupName, backupNs, tmpNs)
-			if err != nil {
-				r.updateStatus(r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+				err = opt.CreatePvcsWithVs(vsrl, namespace, tmpNamespace)
+				if err != nil {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
 			}
 		}
-		err = opt.CreatePvcsWithVs(vsrl, backupNs)
 		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-		}
 		return ctrl.Result{Requeue: true}, nil
 	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseRecreatePVClaim {
-		r.Log.Info("CreatePvcsWithPv()", "vsrl", vsrl, "backupNs", backupNs)
-		if vsrl[0] == nil {
-			vsrl, err = opt.GetVolumeSnapshotResources(backupName, backupNs, tmpNs)
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+				err = opt.CreatePvcsWithPv(vsrl, namespace, tmpNamespace)
+				if err != nil {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, err)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCreateStagePod {
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			err = opt.BuildStagePod(namespace, false, tmpNamespace)
 			if err != nil {
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			}
 		}
-		err = opt.CreatePvcsWithPv(vsrl, backupNs)
-		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-	if veleroExport.Status.Phase == dmapi.PhaseCreateStagePod {
-		r.Log.Info("BuildStagePod()", "backupNs", backupNs)
-		err = opt.BuildStagePod(backupNs, false)
 		r.updateStatus(r.Client, veleroExport, err)
 		return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseWaitStagePodRunning {
-		r.Log.Info("GetStagePodStatus()")
-		running := opt.GetStagePodStatus()
-		if !running {
-			return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			running := opt.GetStagePodStatus(tmpNamespace)
+			if !running {
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
+			}
 		}
 		r.updateStatus(r.Client, veleroExport, nil)
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
-		r.Log.Info("AsyncBackupNamespaceFc()", "backupName", backupName, "backupNs", veleroNamespace)
-		backupPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace)
+
+		veleroPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, includedNamespaces)
 		if err != nil {
 			r.updateStatus(r.Client, veleroExport, err)
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 		}
-		labels := map[string]string{
-			config.SnapshotExportBackupName: backupPlan.Name,
+
+		err = r.updateVeleroExportLabel(r.Client, veleroExport, veleroPlan)
+		if err != nil {
+			r.updateStatus(r.Client, veleroExport, err)
+			return ctrl.Result{Requeue: true}, err
 		}
-		veleroExport.Labels = labels
-		err = r.Client.Update(ctx, veleroExport)
-		veleroExport.Status.VeleroBackupRef = &corev1.ObjectReference{}
-		veleroExport.Status.VeleroBackupRef.Name = backupPlan.Name
-		veleroExport.Status.VeleroBackupRef.Namespace = backupPlan.Namespace
-		r.updateStatus(r.Client, veleroExport, err)
-		return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+
+		r.updateStatus(r.Client, veleroExport, nil)
+		return ctrl.Result{Requeue: true}, err
 	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseWaitFileSystemCopyComplete {
+
 		bpName := veleroExport.Labels[config.SnapshotExportBackupName]
-		r.Log.Info("GetBackupStatus()", "backupPlan", veleroExport.Labels[config.SnapshotExportBackupName])
 		bpPhase, err := opt.GetBackupStatus(bpName, veleroNamespace)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
@@ -250,24 +365,56 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 		}
 	}
-	if veleroExport.Status.Phase == dmapi.PhaseCleanUp {
-		err = opt.AsyncDeleteNamespace(tmpNs)
-		r.updateStatus(r.Client, veleroExport, err)
-		return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-	}
-	if veleroExport.Status.Phase == dmapi.PhaseWaitCleanUpComplete {
-		_, err = opt.GetNamespace(tmpNs)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				err = nil
-			}
-			r.updateStatus(r.Client, veleroExport, err)
 
+	if veleroExport.Status.Phase == dmapi.PhaseCleanUp {
+
+		for _, namespace := range includedNamespaces {
+			err = opt.AsyncDeleteNamespace(namespace)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
-		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
+
+		r.updateStatus(r.Client, veleroExport, nil)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseWaitCleanUpComplete {
+
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			_, err = opt.GetNamespace(tmpNamespace)
+			if err != nil && errors.IsNotFound(err) {
+				continue
+			} else {
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+
+		r.updateStatus(r.Client, veleroExport, nil)
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VeleroExportReconciler) updateVeleroExportLabel(client k8sclient.Client, veleroExport *dmapi.VeleroExport, veleroPlan *velero.Backup) error {
+
+	// updatre backup plan in velero export labels
+	labels := map[string]string{
+		config.SnapshotExportBackupName: veleroPlan.Name,
+	}
+	veleroExport.Labels = labels
+	err := r.Client.Update(context.Background(), veleroExport)
+	if err != nil {
+		return err
+	}
+
+	veleroExport.Status.VeleroBackupRef = &corev1.ObjectReference{}
+	veleroExport.Status.VeleroBackupRef.Name = veleroPlan.Name
+	veleroExport.Status.VeleroBackupRef.Namespace = veleroPlan.Namespace
+	return nil
 }
 
 func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExport *dmapi.VeleroExport, err error) {
@@ -276,6 +423,9 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 		veleroExport.Status.State = dmapi.StateFailed
 		r.Log.Error(err, "snapshot export failure", "phase", veleroExport.Status.Phase)
 	} else {
+		if veleroExport.Status.Phase == dmapi.PhaseCreated {
+			veleroExport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
+		}
 		veleroExport.Status.Phase = r.nextPhase(veleroExport.Status.Phase)
 		if veleroExport.Status.Phase == dmapi.GetLastPhase(veleroExportSteps) {
 			veleroExport.Status.State = dmapi.StateCompleted
@@ -288,25 +438,58 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 	r.Log.Info("snapshot export status update", "phase", veleroExport.Status.Phase, "state", veleroExport.Status.State)
 }
 
-func (r *VeleroExportReconciler) Precheck(client k8sclient.Client, veleroExport *dmapi.VeleroExport, opt *ops.Operation) error {
-	backupRef := veleroExport.Spec.VeleroBackupRef
-	r.Log.Info("Precheck()", "backupRef.Name", backupRef.Name, "backupRef.Namespace", backupRef.Namespace)
-	backup, err := opt.GetBackupPlan(backupRef.Name, backupRef.Namespace)
+func (r *VeleroExportReconciler) precheck(client k8sclient.Client, veleroExport *dmapi.VeleroExport, opt *ops.Operation) error {
+	vBackupRef := veleroExport.Spec.VeleroBackupRef
+	//check veleroBackup Ref
+	if !RefSet(vBackupRef) {
+		return fmt.Errorf("Invalid velero backup ref")
+	}
+	// get veleroBackup plan
+	backup, err := opt.GetBackupPlan(vBackupRef.Name, vBackupRef.Namespace)
 	if err != nil || backup.Status.Phase != velero.BackupPhaseCompleted || *backup.Spec.SnapshotVolumes != true {
-		err = fmt.Errorf("invalid backup plan %s.", backupRef.Name)
+		err = fmt.Errorf("invalid backup plan %s.", vBackupRef.Name)
 	} else {
-		r.Log.Info("Got velero backup plan", "backup plan", backupRef.Name, "in namespace", backupRef.Namespace, "for namespace", veleroExport.Spec.BackupNamespace)
-		vsList, err := opt.GetVolumeSnapshotList(backupRef.Name, veleroExport.Spec.BackupNamespace)
-		if err != nil {
-			r.Log.Info("validate backup failed, could not get volume snapshot", "backup plan", backupRef.Name)
-			err = fmt.Errorf("validate backup failed, could not get volume snapshot for backup plan %s", backupRef.Name)
-		} else {
-			if len(vsList.Items) == 0 {
-				err = fmt.Errorf("empty volumesnapshot list to export")
+		// check if any volumesnapshot
+		emptyVsList := true
+		for _, namespace := range veleroExport.Spec.IncludedNamespaces {
+			vsList, err := opt.GetVolumeSnapshotList(vBackupRef.Name, namespace)
+			if err != nil {
+				err = fmt.Errorf("validate backup failed, could not get volume snapshot for backup plan %s", vBackupRef.Name)
+				return err
+			} else {
+				if len(vsList.Items) > 0 {
+					emptyVsList = false
+					break
+				}
 			}
+		}
+		if emptyVsList {
+			err = fmt.Errorf("empty volumesnapshot list to export")
+			return err
 		}
 	}
 	return err
+}
+
+func (r *VeleroExportReconciler) validatePolicy(export *dmapi.VeleroExport) error {
+	policy := &export.Spec.Policy
+	if policy == nil {
+		policy = &dmapi.ExportPolicy{
+			Retention: dmapi.DefaultExportRetention,
+		}
+	}
+	return nil
+}
+
+func (r *VeleroExportReconciler) deleteVeleroExport(export *dmapi.VeleroExport) error {
+
+	// Delete velero export
+	err := r.Client.Delete(context.TODO(), export)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -327,4 +510,10 @@ func (r *VeleroExportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return nil
+}
+
+func RefSet(ref *corev1.ObjectReference) bool {
+	return ref != nil &&
+		ref.Namespace != "" &&
+		ref.Name != ""
 }

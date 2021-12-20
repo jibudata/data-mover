@@ -28,11 +28,15 @@ func main() {
 	action := flag.String("action", "", "backup or restore")
 	flag.Parse()
 	if *backupName == "" {
-		fmt.Println("You must specify the deployment name.")
+		fmt.Println("You must specify the velero backup name")
 		os.Exit(0)
 	}
 	if *ns == "" {
-		fmt.Println("You must specify the namespace name.")
+		fmt.Println("You must specify the namespace name")
+		os.Exit(0)
+	}
+	if *action == "" {
+		fmt.Println("You must specify the action name - backup or restore")
 		os.Exit(0)
 	}
 

@@ -144,9 +144,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	backupName := veleroImport.Spec.VeleroBackupRef.Name
 	veleroNamespace := veleroImport.Spec.VeleroBackupRef.Namespace
-	restoreNamespace := veleroImport.Spec.RestoreNamespace
-	tempNampespace := config.TempNamespacePrefix + backupName
-	handler := operation.NewOperation(r.Log, r.Client, tempNampespace)
+	// restoreNamespace := veleroImport.Spec.RestoreNamespace
+	includedNamespaces := veleroImport.Spec.IncludedNamespaces
+	// tempNampespace := config.TempNamespacePrefix + backupName
+	handler := operation.NewOperation(r.Log, r.Client)
 
 	// Precheck
 	if veleroImport.Status.Phase == dmapi.PhaseInitial {

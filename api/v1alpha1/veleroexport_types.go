@@ -17,12 +17,23 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DefaultExportRetention = 30 * 24 * time.Hour
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+type ExportPolicy struct {
+	// Requency of the export, default is 1 export per snapshot
+	Retention time.Duration `json:"retention,omitempty"`
+}
 
 // VeleroExportSpec defines the desired state of VeleroExport
 type VeleroExportSpec struct {
@@ -33,11 +44,12 @@ type VeleroExportSpec struct {
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
 	// Namespace that is backuped by velero
-	BackupNamespace string `json:"backupNamespace"`
+	IncludedNamespaces []string `json:"includedNamespaces,omitempty"`
 
 	// DataSourceMapping is a map of pvc names to volumesnapshot names to be exported.
 	// +optional
 	DataSourceMapping map[string]string `json:"dataSourceMapping,omitempty"`
+	Policy            ExportPolicy      `json:"policy,omitempty"`
 }
 
 // VeleroExportStatus defines the observed state of VeleroExport
