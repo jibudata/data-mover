@@ -82,4 +82,3 @@ Deleted pod stage-wordpress-mysql-d9b8d8884-9g4r5-xzr8r
 === Step 5. Invoke velero to restore original namespace
 Created velero restore plan generate-restore-tfqhz
 ```
-
