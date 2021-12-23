@@ -1,0 +1,25 @@
+domain: jibudata.com
+layout:
+- go.kubebuilder.io/v3
+projectName: data-mover
+repo: github.com/jibudata/data-mover
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jibudata.com
+  group: ys
+  kind: VeleroImport
+  path: github.com/jibudata/data-mover/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jibudata.com
+  group: ys
+  kind: VeleroExport
+  path: github.com/jibudata/data-mover/api/v1alpha1
+  version: v1alpha1
+version: "3"

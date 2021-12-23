@@ -1,0 +1,7 @@
+apiVersion: ys.jibudata.com/v1alpha1
+kind: VeleroImport
+metadata:
+  name: veleroimport-sample
+spec:
+  # Add fields here
+  foo: bar

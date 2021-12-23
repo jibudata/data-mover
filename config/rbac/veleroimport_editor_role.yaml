@@ -1,0 +1,24 @@
+# permissions for end users to edit veleroimports.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: veleroimport-editor-role
+rules:
+- apiGroups:
+  - ys.jibudata.com
+  resources:
+  - veleroimports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ys.jibudata.com
+  resources:
+  - veleroimports/status
+  verbs:
+  - get
