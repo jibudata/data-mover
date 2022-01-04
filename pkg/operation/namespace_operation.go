@@ -66,11 +66,11 @@ func (o *Operation) AsyncDeleteNamespace(ns string) error {
 		Name: ns,
 	}, namespace)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get namespace %s", ns))
+		// o.logger.Error(err, fmt.Sprintf("Failed to get namespace %s", ns))
 		// If namespace not exist, skip
 		if serr, ok := err.(*errors.StatusError); ok {
 			if serr.Status().Reason == "NotFound" {
-				o.logger.Error(err, fmt.Sprintf("Skip deleting non-existing namespace %s", ns))
+				o.logger.Info(fmt.Sprintf("Skip deleting non-existing namespace %s", ns))
 				return nil
 			}
 		}

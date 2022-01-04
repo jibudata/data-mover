@@ -40,6 +40,8 @@ type VeleroImportSpec struct {
 	// Names of PVCs need to be imported
 	// +optional
 	PvcNames []string `json:"pvcNames,omitempty"`
+
+	SnapshotOnly bool `json:"snapshotOnly,omitempty"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport

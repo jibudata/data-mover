@@ -9,6 +9,7 @@ import (
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -231,7 +232,7 @@ func (o *Operation) GetVeleroRestore(restoreName string, veleroNamespace string)
 		Name:      restoreName,
 		Namespace: veleroNamespace,
 	}
-	o.client.Get(context.Background(), key, restore)
+	o.client.Get(context.TODO(), key, restore)
 	return restore
 }
 
@@ -247,4 +248,28 @@ func (o *Operation) MonitorRestoreNamespace(restoreName string, veleroNamespace 
 		restored = o.IsNamespaceRestored(restoreName, veleroNamespace)
 		time.Sleep(time.Duration(5) * time.Second)
 	}
+}
+
+// Get velero Backup
+func (o *Operation) GetVeleroBackupUID(client k8sclient.Client, jobUID types.UID) (*velero.Backup, error) {
+	o.logger.Info("GetVeleroBackup", "uid", string(jobUID))
+	labels := make(map[string]string)
+	labels["migration-initial-backup"] = string(jobUID)
+
+	list := velero.BackupList{}
+	err := client.List(
+		context.TODO(),
+		&list,
+		k8sclient.MatchingLabels(labels))
+	if err != nil {
+		o.logger.Info("error", "err", err)
+		return nil, err
+	}
+	o.logger.Info("GetVeleroBackup", "list", list)
+	if len(list.Items) > 0 {
+		o.logger.Info("GetVeleroBackup", "&list.Items[0", &list.Items[0])
+		return &list.Items[0], nil
+	}
+
+	return nil, nil
 }

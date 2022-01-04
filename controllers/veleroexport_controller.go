@@ -50,6 +50,10 @@ const (
 	requeueAfterSlow = 20 * time.Second
 )
 
+const (
+	VolumeSnapshotResourceAnnPrefix = "Volume-Snapshot-Resource-"
+)
+
 var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseCreated},
 	{Phase: dmapi.PhasePrecheck},
@@ -65,6 +69,8 @@ var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseWaitStagePodRunning},
 	{Phase: dmapi.PhaseStartFileSystemCopy},
 	{Phase: dmapi.PhaseWaitFileSystemCopyComplete},
+	{Phase: dmapi.PhaseUpdateSnapshotContentBack},
+	{Phase: dmapi.PhaseCheckSnapshotContentBack},
 	{Phase: dmapi.PhaseCleanUp},
 	{Phase: dmapi.PhaseWaitCleanUpComplete},
 	{Phase: dmapi.PhaseCompleted},
@@ -125,6 +131,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	_ = r.validatePolicy(veleroExport)
 
 	// check retention
+	if veleroExport.Spec.Policy.Retention == time.Duration(0) {
+		veleroExport.Spec.Policy.Retention = time.Duration(24)
+	}
 	retention := veleroExport.Spec.Policy.Retention * time.Hour
 	if veleroExport.Status.StartTimestamp != nil {
 		stop := veleroExport.Status.StartTimestamp.Time.Add(retention)
@@ -140,7 +149,11 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseCreated {
-		r.Log.Info("snapshot export started")
+		r.Log.Info(
+			"snapshot export started",
+			"retention",
+			int32(veleroExport.Spec.Policy.Retention),
+		)
 		r.updateStatus(r.Client, veleroExport, err)
 	}
 
@@ -185,7 +198,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// create temp namespaces
 	if veleroExport.Status.Phase == dmapi.PhaseCreateTempNamespace {
 		for _, namespace := range includedNamespaces {
-			err = opt.CreateNamespace(namespace, false)
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			err = opt.CreateNamespace(tmpNamespace, false)
 			if err != nil {
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{Requeue: true}, err
@@ -199,12 +213,13 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for _, namespace := range includedNamespaces {
 			// get type VolumeSnapshotResource struct {
 			//     VolumeSnapshotName string
-			//     VolumeSnapshotUID  types.UID
+			//     OrigVolumeSnapshotUID  types.UID
 			//     PersistentVolumeClaimName string
 			//     VolumeSnapshotContentName string
 			//     VolumeSnapshotContentName string
+			//     NewVoluemSnapshotUID types.UID
 			// }
-			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
 				continue
 			}
 
@@ -214,17 +229,21 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{Requeue: true}, err
 			}
+			if len(vsrl) == 0 {
+				continue
+			}
 
 			if veleroExport.Annotations == nil {
 				veleroExport.Annotations = make(map[string]string)
 			}
 			vsrString := ""
 			for _, vsr := range vsrl {
-				vsrString = vsr.VolumeSnapshotName + "," + string(vsr.VolumeSnapshotUID) + "," + vsr.PersistentVolumeClaimName + "," + vsr.VolumeSnapshotContentName
+				vsrString = vsrString + vsr.VolumeSnapshotName + "," + string(vsr.OrigVolumeSnapshotUID) + "," + vsr.PersistentVolumeClaimName + "," + vsr.VolumeSnapshotContentName + "," + string(vsr.NewVolumeSnapshotUID)
 				vsrString += ";"
 			}
-			veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] = vsrString[:len(vsrString)-1]
-			err = r.Client.Update(context.Background(), veleroExport)
+
+			veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] = vsrString[:(len(vsrString) - 1)]
+			err = r.Client.Update(context.TODO(), veleroExport)
 			if err != nil {
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{Requeue: true}, err
@@ -237,10 +256,12 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
-				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
-				// how to check snapshot content has already been updated?
-				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, tmpNamespace)
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
+				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, tmpNamespace, false)
 				if err != nil {
 					r.updateStatus(r.Client, veleroExport, err)
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
@@ -254,14 +275,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
-				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
 				ready, err := opt.IsVolumeSnapshotContentReady(vsrl, tmpNamespace)
 				if !ready {
 					r.updateStatus(r.Client, veleroExport, err)
-					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-				}
-				if !ready {
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 				}
 			}
@@ -272,8 +293,11 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroExport.Status.Phase == dmapi.PhaseCreatePVClaim {
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
-				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
 				err = opt.CreatePvcsWithVs(vsrl, namespace, tmpNamespace)
 				if err != nil {
 					r.updateStatus(r.Client, veleroExport, err)
@@ -289,8 +313,11 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			if veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace] != "" {
-				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations["Volume-Snapshot-Resource-"+namespace])
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
 				err = opt.CreatePvcsWithPv(vsrl, namespace, tmpNamespace)
 				if err != nil {
 					r.updateStatus(r.Client, veleroExport, err)
@@ -366,10 +393,46 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
+	if veleroExport.Status.Phase == dmapi.PhaseUpdateSnapshotContentBack {
+		for _, namespace := range includedNamespaces {
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
+				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, namespace, true)
+				if err != nil {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, err)
+
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCheckSnapshotContentBack {
+		for _, namespace := range includedNamespaces {
+			if veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace] != "" {
+				vsrl := opt.GetVolumeSnapshotResourceList(veleroExport.Annotations[VolumeSnapshotResourceAnnPrefix+namespace])
+				if vsrl == nil {
+					continue
+				}
+				ready, err := opt.IsVolumeSnapshotContentReady(vsrl, namespace)
+				if !ready {
+					r.updateStatus(r.Client, veleroExport, err)
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+			}
+		}
+		r.updateStatus(r.Client, veleroExport, err)
+	}
+
 	if veleroExport.Status.Phase == dmapi.PhaseCleanUp {
 
 		for _, namespace := range includedNamespaces {
-			err = opt.AsyncDeleteNamespace(namespace)
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			err = opt.AsyncDeleteNamespace(tmpNamespace)
 			if err != nil {
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{Requeue: true}, err
@@ -402,11 +465,15 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 func (r *VeleroExportReconciler) updateVeleroExportLabel(client k8sclient.Client, veleroExport *dmapi.VeleroExport, veleroPlan *velero.Backup) error {
 
 	// updatre backup plan in velero export labels
-	labels := map[string]string{
-		config.SnapshotExportBackupName: veleroPlan.Name,
+	if veleroExport.Labels != nil {
+		veleroExport.Labels[config.SnapshotExportBackupName] = veleroPlan.Name
+	} else {
+		veleroExport.Labels = map[string]string{
+			config.SnapshotExportBackupName: veleroPlan.Name,
+		}
 	}
-	veleroExport.Labels = labels
-	err := r.Client.Update(context.Background(), veleroExport)
+
+	err := r.Client.Update(context.TODO(), veleroExport)
 	if err != nil {
 		return err
 	}
@@ -434,7 +501,7 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 			veleroExport.Status.State = dmapi.StateInProgress
 		}
 	}
-	_ = r.Client.Status().Update(context.Background(), veleroExport)
+	_ = r.Client.Status().Update(context.TODO(), veleroExport)
 	r.Log.Info("snapshot export status update", "phase", veleroExport.Status.Phase, "state", veleroExport.Status.State)
 }
 

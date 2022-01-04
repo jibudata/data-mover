@@ -63,13 +63,27 @@ var veleroImportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseDeletingStagePod},
 	{Phase: dmapi.PhaseRestoreOriginNamespace},
 	{Phase: dmapi.PhaseRestoringOriginNamespace},
-	{Phase: dmapi.PhaseCleanUp},
-	{Phase: dmapi.PhaseWaitCleanUpComplete},
+	// {Phase: dmapi.PhaseCleanUp},
+	// {Phase: dmapi.PhaseWaitCleanUpComplete},
 	{Phase: dmapi.PhaseCompleted},
 }
 
+var veleroImportSnapshotSteps = []dmapi.Step{
+	{Phase: dmapi.PhaseInitial},
+	{Phase: dmapi.PhasePrecheck},
+	{Phase: dmapi.PhaseRetrieveFileSystemCopy},
+	{Phase: dmapi.PhaseRestoreTempNamespace},
+	{Phase: dmapi.PhaseRestoringTempNamespace},
+	{Phase: dmapi.PhaseDeleteStagePod},
+	{Phase: dmapi.PhaseDeletingStagePod},
+	// {Phase: dmapi.PhaseCleanUp},
+	// {Phase: dmapi.PhaseWaitCleanUpComplete},
+	{Phase: dmapi.PhaseCompleted},
+}
+var steps []dmapi.Step
+
 func (r *VeleroImportReconciler) nextPhase(phase string) string {
-	return dmapi.GetNextPhase(phase, veleroImportSteps)
+	return dmapi.GetNextPhase(phase, steps)
 }
 
 func getRestoreObjectReference(restore *velero.Restore) *corev1.ObjectReference {
@@ -91,7 +105,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 		r.Log.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
 		veleroImport.Status.Phase = r.nextPhase(veleroImport.Status.Phase)
-		if veleroImport.Status.Phase == dmapi.GetLastPhase(veleroImportSteps) {
+		if veleroImport.Status.Phase == dmapi.GetLastPhase(steps) {
 			veleroImport.Status.State = dmapi.StateCompleted
 			veleroImport.Status.CompletionTimestamp = &metav1.Time{Time: time.Now()}
 		} else {
@@ -99,7 +113,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 		}
 	}
 	r.Log.Info("snapshot import status update", "phase", veleroImport.Status.Phase, "state", veleroImport.Status.State)
-	err = r.Client.Status().Update(context.Background(), veleroImport)
+	err = r.Client.Status().Update(context.TODO(), veleroImport)
 	return err
 }
 
@@ -127,6 +141,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		r.Log.Error(err, MessageObjectNotFound)
 		return ctrl.Result{Requeue: true}, nil
+	}
+	if veleroImport.Spec.SnapshotOnly {
+		steps = veleroImportSnapshotSteps
+	} else {
+		steps = veleroImportSteps
 	}
 
 	// Report reconcile error.
@@ -236,9 +255,9 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		r.Log.Info("Start invoking velero to restore original namespace ...")
-		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, true)
+		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false)
 		if err != nil {
-			r.Log.Error(err, fmt.Sprintf("Failed to restore original namespace", err.Error()))
+			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 		}

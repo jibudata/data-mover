@@ -38,7 +38,7 @@ func BackupManager(client k8sclient.Client, backupName *string, ns *string) {
 		panic(err)
 	}
 	fmt.Println("=== Step 2. Update volumesnapshot content to new volumesnapshot in temporary namespace")
-	err = handler.SyncUpdateVolumeSnapshotContents(vsrl, dmNamespace)
+	err = handler.SyncUpdateVolumeSnapshotContents(vsrl, dmNamespace, false)
 	if err != nil {
 		panic(err)
 	}
