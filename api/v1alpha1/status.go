@@ -34,6 +34,8 @@ const (
 	PhaseCreateStagePod             = "CreateStagePod"
 	PhaseWaitStagePodRunning        = "WaitStagePodRunning"
 	PhaseStartFileSystemCopy        = "StartFileSystemCopy"
+	PhaseUpdateSnapshotContentBack  = "UpdateSnapshotContentBack"
+	PhaseCheckSnapshotContentBack   = "CheckSnapshotContentBack"
 	PhaseWaitFileSystemCopyComplete = "WaitFileSystemCopyComplete"
 
 	// import

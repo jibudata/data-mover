@@ -18,5 +18,5 @@ func NewOperation(logger logr.Logger, client k8sclient.Client) *Operation {
 		client: client,
 		// dmNamespace: dmNamespace,
 	}
-	
+
 }

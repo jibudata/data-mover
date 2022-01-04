@@ -85,10 +85,10 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
 	}
-	_ = o.client.List(context.Background(), podList, options)
+	_ = o.client.List(context.TODO(), podList, options)
 	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, tempNs)
 	for _, stagePod := range stagePods {
-		err := o.client.Create(context.Background(), &stagePod.Pod)
+		err := o.client.Create(context.TODO(), &stagePod.Pod)
 		if err != nil {
 			o.logger.Error(err, fmt.Sprintf("Failed to create pod %s", stagePod.Pod.Name))
 			return err
@@ -101,7 +101,7 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	for !running && wait {
 		time.Sleep(time.Duration(5) * time.Second)
 		podList = &core.PodList{}
-		_ = o.client.List(context.Background(), podList, options)
+		_ = o.client.List(context.TODO(), podList, options)
 		running = true
 		for _, pod := range podList.Items {
 			o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
@@ -134,7 +134,7 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 		Namespace: ns,
 	}
 	podList := &core.PodList{}
-	err := o.client.List(context.Background(), podList, options)
+	err := o.client.List(context.TODO(), podList, options)
 	return podList.Items, err
 
 }
@@ -248,7 +248,7 @@ func (o *Operation) IsStagePodDeleted(ns string) bool {
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
 	}
-	_ = o.client.List(context.Background(), podList, options)
+	_ = o.client.List(context.TODO(), podList, options)
 	for _, pod := range podList.Items {
 		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
 			running = true
@@ -273,7 +273,7 @@ func (o *Operation) AsyncDeleteStagePod(ns string) error {
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
 	}
-	err := o.client.List(context.Background(), podList, options)
+	err := o.client.List(context.TODO(), podList, options)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to get pod list in namespace %s", ns))
 		return err
@@ -281,7 +281,7 @@ func (o *Operation) AsyncDeleteStagePod(ns string) error {
 	for _, pod := range podList.Items {
 		var name = pod.Name
 		if strings.HasPrefix(name, stagePodNamePrefix) {
-			err = o.client.Delete(context.Background(), &pod)
+			err = o.client.Delete(context.TODO(), &pod)
 			if err != nil {
 				o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
 				return err

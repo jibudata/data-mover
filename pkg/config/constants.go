@@ -11,8 +11,9 @@ const (
 	VeleroSrcClusterGitAnn   = "velero.io/source-cluster-k8s-gitversion"
 	VeleroK8sMajorVerAnn     = "velero.io/source-cluster-k8s-major-version"
 	VeleroK8sMinorVerAnn     = "velero.io/source-cluster-k8s-minor-version"
-	SnapshotExportBackupName = "snapshot-export-backup-name"
-	TempNamespacePrefix      = "dm-"
+	SnapshotExportBackupName = "snapshot-export-velero-backup-name"
+	// DataExportName           = "data-export-name"
+	TempNamespacePrefix = "dm-"
 )
 
 var (

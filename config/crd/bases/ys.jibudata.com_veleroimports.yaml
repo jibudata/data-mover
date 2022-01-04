@@ -45,6 +45,8 @@ spec:
                 items:
                   type: string
                 type: array
+              snapshotOnly:
+                type: boolean
               veleroBackupRef:
                 description: Exported velero backupjob name with file system copy
                 properties:
