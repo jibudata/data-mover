@@ -89,7 +89,7 @@ func (r *VeleroExportReconciler) nextPhase(phase string) string {
 // TODO(user): Modify the Reconcile function to compare the state specified by
 // the VeleroExport object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
-// the user.
+// the user.api/v1alpha1/veleroexport_types.go
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
@@ -490,6 +490,7 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 		veleroExport.Status.State = dmapi.StateFailed
 		r.Log.Error(err, "snapshot export failure", "phase", veleroExport.Status.Phase)
 	} else {
+		veleroExport.Status.Message = ""
 		if veleroExport.Status.Phase == dmapi.PhaseCreated {
 			veleroExport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
 		}

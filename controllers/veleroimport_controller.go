@@ -104,6 +104,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 		veleroImport.Status.State = dmapi.StateFailed
 		r.Log.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
+		veleroImport.Status.Message = ""
 		veleroImport.Status.Phase = r.nextPhase(veleroImport.Status.Phase)
 		if veleroImport.Status.Phase == dmapi.GetLastPhase(steps) {
 			veleroImport.Status.State = dmapi.StateCompleted
