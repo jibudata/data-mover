@@ -124,7 +124,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	includedNamespaces := veleroExport.Spec.IncludedNamespaces
 	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
 	opt := ops.NewOperation(r.Log, r.Client)
-	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
+
+	if veleroExport.Status.Phase == dmapi.PhaseCompleted ||
+		veleroExport.Status.State == dmapi.StateFailed {
 		// do nothing
 		return ctrl.Result{}, nil
 	}
@@ -154,17 +156,19 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"retention",
 			int32(veleroExport.Spec.Policy.Retention),
 		)
-		r.updateStatus(r.Client, veleroExport, err)
+		r.updateStatus(r.Client, veleroExport, nil)
 	}
 
 	// precheck
 	if veleroExport.Status.Phase == dmapi.PhasePrecheck {
 
 		err = r.precheck(r.Client, veleroExport, opt)
-		r.updateStatus(r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{Requeue: true}, err
+		if err != nil && errors.IsConflict(err) {
+			// do nothing
+		} else {
+			r.updateStatus(r.Client, veleroExport, err)
 		}
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	// delete the temparory namespace already exists
@@ -173,9 +177,11 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
 			err = opt.AsyncDeleteNamespace(tmpNamespace)
-			if err != nil {
-				r.updateStatus(r.Client, veleroExport, err)
+			if err != nil && errors.IsConflict(err) {
+				// do nothing
 				return ctrl.Result{Requeue: true}, err
+			} else if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
 			}
 		}
 		r.updateStatus(r.Client, veleroExport, nil)
@@ -262,7 +268,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					continue
 				}
 				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, tmpNamespace, false)
-				if err != nil {
+				if err != nil && errors.IsConflict(err) {
+					// do nothing
+					return ctrl.Result{Requeue: true}, err
+				} else if err != nil {
 					r.updateStatus(r.Client, veleroExport, err)
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 				}
@@ -401,7 +410,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					continue
 				}
 				err = opt.AsyncUpdateVolumeSnapshotContents(vsrl, namespace, true)
-				if err != nil {
+				if err != nil && errors.IsConflict(err) {
+					// do nothing
+					return ctrl.Result{Requeue: true}, err
+				} else if err != nil {
 					r.updateStatus(r.Client, veleroExport, err)
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 				}
