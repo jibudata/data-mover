@@ -186,11 +186,7 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 			VolumeName: pvc.Spec.VolumeName,
 		},
 	}
-	err = o.client.Create(context.TODO(), newPvc)
-	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create pvc in namespace %s", namespace))
-		return err
-	}
+	err = o.createPvc(newPvc)
 	o.logger.Info(fmt.Sprintf("Create pvc %s in %s with pv %s", vsr.PersistentVolumeClaimName, namespace, pvName))
 
 	// patch the pv to Delete
@@ -206,5 +202,18 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 		return err
 	}
 	o.logger.Info(fmt.Sprintf("Patch pv %s with delete option \n", pvName))
+	return nil
+}
+
+func (o *Operation) createPvc(pvc *core.PersistentVolumeClaim) error {
+	err := o.client.Create(context.TODO(), pvc)
+	if err != nil {
+		if errors.IsConflict(err) {
+			o.createPvc(pvc)
+		} else {
+			o.logger.Error(err, fmt.Sprintf("Failed to create pvc in namespace %s", pvc.Namespace))
+			return err
+		}
+	}
 	return nil
 }
