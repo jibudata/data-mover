@@ -239,7 +239,7 @@ func (o *Operation) GetVeleroRestore(restoreName string, veleroNamespace string)
 func (o *Operation) IsNamespaceRestored(restoreName string, veleroNamespace string) bool {
 	restore := o.GetVeleroRestore(restoreName, veleroNamespace)
 	status := string(restore.Status.Phase)
-	return status == string(velero.BackupPhaseCompleted)
+	return status == string(velero.BackupPhaseCompleted) || status == string(velero.BackupPhasePartiallyFailed)
 }
 
 func (o *Operation) MonitorRestoreNamespace(restoreName string, veleroNamespace string) {

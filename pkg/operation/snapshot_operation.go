@@ -311,3 +311,19 @@ func (o *Operation) GetVolumeSnapshotResourceList(vsrl string) []*VolumeSnapshot
 	}
 	return volumeSnapshotResourceList
 }
+
+func (o *Operation) DeleteVolumeSnapshots(vsrl []*VolumeSnapshotResource, namespace string) error {
+	for _, vsr := range vsrl {
+		volumeSnapshot := &snapshotv1beta1api.VolumeSnapshot{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      vsr.VolumeSnapshotName,
+			},
+		}
+		err := o.client.Delete(context.TODO(), volumeSnapshot)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

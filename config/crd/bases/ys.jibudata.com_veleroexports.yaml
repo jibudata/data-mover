@@ -111,7 +111,7 @@ spec:
                 type: string
               state:
                 type: string
-              veleroBackup:
+              veleroBackupRef:
                 description: 'ObjectReference contains enough information to let you
                   inspect or modify the referred object. --- New uses of this type
                   are discouraged because of difficulty describing its usage when

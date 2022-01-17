@@ -59,7 +59,7 @@ type VeleroExportStatus struct {
 	Phase               string                  `json:"phase"`
 	State               string                  `json:"state"`
 	Message             string                  `json:"message"`
-	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackup,omitempty"`
+	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupRef,omitempty"`
 	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`
 	CompletionTimestamp *metav1.Time            `json:"completionTimestamp,omitempty"`
 }

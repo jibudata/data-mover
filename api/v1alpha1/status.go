@@ -37,6 +37,7 @@ const (
 	PhaseUpdateSnapshotContentBack  = "UpdateSnapshotContentBack"
 	PhaseCheckSnapshotContentBack   = "CheckSnapshotContentBack"
 	PhaseWaitFileSystemCopyComplete = "WaitFileSystemCopyComplete"
+	PhaseDeleteVolumeSnapshot       = "DeleteVolumeSnapshot"
 
 	// import
 	PhaseRetrieveFileSystemCopy = "RetrieveFileSystemCopy"
