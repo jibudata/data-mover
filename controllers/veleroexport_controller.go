@@ -422,8 +422,13 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
+		var backupNamespaces []string
+		for _, namespace := range includedNamespaces {
+			tmpNamespace := config.TempNamespacePrefix + namespace
+			backupNamespaces = append(backupNamespaces, tmpNamespace)
+		}
 
-		veleroPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, includedNamespaces)
+		veleroPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, backupNamespaces)
 		if err != nil {
 			r.updateStatus(r.Client, veleroExport, err)
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err

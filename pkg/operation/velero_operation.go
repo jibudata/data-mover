@@ -150,6 +150,7 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	}
 	if excludePV {
 		excludedResources = append(excludedResources, "persistentvolumeclaims")
+		excludedResources = append(excludedResources, "persistentvolumes")
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{

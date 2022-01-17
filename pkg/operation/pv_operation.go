@@ -189,6 +189,12 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 	err = o.createPvc(newPvc)
 	o.logger.Info(fmt.Sprintf("Create pvc %s in %s with pv %s", vsr.PersistentVolumeClaimName, namespace, pvName))
 
+	err = o.isPVCReady(namespace, vsr.PersistentVolumeClaimName)
+	if err != nil {
+		o.logger.Error(err, "Get pvc failure")
+		return err
+	}
+
 	// patch the pv to Delete
 	patch = []byte(`{"spec": {"persistentVolumeReclaimPolicy": "Delete"}}`)
 	err = o.client.Patch(context.TODO(), &core.PersistentVolume{
@@ -212,6 +218,22 @@ func (o *Operation) createPvc(pvc *core.PersistentVolumeClaim) error {
 			o.createPvc(pvc)
 		} else {
 			o.logger.Error(err, fmt.Sprintf("Failed to create pvc in namespace %s", pvc.Namespace))
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operation) isPVCReady(namespace string, PersistentVolumeClaimName string) error {
+	pvc := &core.PersistentVolumeClaim{}
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
+		Namespace: namespace,
+		Name:      PersistentVolumeClaimName,
+	}, pvc)
+	if pvc.Status.Phase != "Bound" {
+		time.Sleep(time.Duration(1) * time.Second)
+		err = o.isPVCReady(namespace, PersistentVolumeClaimName)
+		if err != nil {
 			return err
 		}
 	}
