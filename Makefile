@@ -1,8 +1,10 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
+
+JIBU_DEPLOY_NS = qiming-backend
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -86,6 +88,14 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
+
+ys1000-deploy: manifests kustomize set-jibudata-ns## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > deploy/ys1000/deployments.yaml
+
+set-jibudata-ns:
+	cd config/manager && $(KUSTOMIZE) edit set namespace ${JIBU_DEPLOY_NS}
+	cd config/default && $(KUSTOMIZE) edit set namespace ${JIBU_DEPLOY_NS}
 
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen

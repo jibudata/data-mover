@@ -5,6 +5,13 @@ generatorOptions:
   disableNameSuffixHash: true
 
 configMapGenerator:
-- name: manager-config
-  files:
+- files:
   - controller_manager_config.yaml
+  name: manager-config
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: qiming-backend
+images:
+- name: controller
+  newName: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover
+  newTag: latest
