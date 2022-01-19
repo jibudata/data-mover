@@ -62,6 +62,7 @@ type VeleroExportStatus struct {
 	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupRef,omitempty"`
 	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`
 	CompletionTimestamp *metav1.Time            `json:"completionTimestamp,omitempty"`
+	StopTimestamp       *metav1.Time            `json:"stopTimestamp,omitempty"`
 }
 
 //+kubebuilder:object:root=true
