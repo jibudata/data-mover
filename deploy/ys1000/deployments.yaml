@@ -496,7 +496,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:latest
+        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:v0.1.1
         name: manager
         resources:
           limits:
