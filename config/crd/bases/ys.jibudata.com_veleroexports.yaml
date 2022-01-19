@@ -111,6 +111,9 @@ spec:
                 type: string
               state:
                 type: string
+              stopTimestamp:
+                format: date-time
+                type: string
               veleroBackupRef:
                 description: 'ObjectReference contains enough information to let you
                   inspect or modify the referred object. --- New uses of this type
