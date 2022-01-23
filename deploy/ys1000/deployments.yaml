@@ -322,6 +322,18 @@ metadata:
   name: data-mover-manager-role
 rules:
 - apiGroups:
+  - velero.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ys.jibudata.com
   resources:
   - veleroexports
@@ -496,7 +508,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:v0.1.1
+        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:latest
         name: manager
         resources:
           limits:
