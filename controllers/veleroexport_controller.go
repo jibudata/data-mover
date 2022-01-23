@@ -84,6 +84,7 @@ func (r *VeleroExportReconciler) nextPhase(phase string) string {
 //+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=ys.jibudata.com,resources=veleroexports/finalizers,verbs=update
+//+kubebuilder:rbac:groups=velero.io,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
