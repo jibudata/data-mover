@@ -545,6 +545,7 @@ spec:
       - command:
         - /manager
         image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:latest
+        imagePullPolicy: Always
         name: manager
         resources:
           limits:
