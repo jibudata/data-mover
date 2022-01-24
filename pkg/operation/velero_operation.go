@@ -27,8 +27,11 @@ func (o *Operation) GetVeleroBackup(backupName string, veleroNamespace string) (
 		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
 		return nil, err
 	}
-	bp := backups.Items[0]
-	return &bp, nil
+	if len(backups.Items) > 0 {
+		return &backups.Items[0], nil
+	}
+
+	return nil, nil
 }
 
 func (o *Operation) GetBackupPlan(backupName string, veleroNamespace string) (*velero.Backup, error) {

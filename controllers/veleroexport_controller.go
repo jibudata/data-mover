@@ -445,25 +445,37 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
-		var backupNamespaces []string
-		for _, namespace := range includedNamespaces {
-			tmpNamespace := config.TempNamespacePrefix + namespace
-			backupNamespaces = append(backupNamespaces, tmpNamespace)
-		}
+		bpName := veleroExport.Labels[config.SnapshotExportBackupName]
+		veleroPlan, err := opt.GetVeleroBackup(bpName, veleroNamespace)
+		if (err != nil && errors.IsNotFound(err)) || (veleroPlan == nil && err == nil) {
+			r.Log.Info("velero plan doesn't exist")
+			var backupNamespaces []string
+			for _, namespace := range includedNamespaces {
+				tmpNamespace := config.TempNamespacePrefix + namespace
+				backupNamespaces = append(backupNamespaces, tmpNamespace)
+			}
 
-		veleroPlan, err := opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, backupNamespaces)
-		if err != nil {
+			veleroPlan, err = opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, backupNamespaces)
+			if err != nil {
+				r.updateStatus(r.Client, veleroExport, err)
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+			}
+
+		} else if err != nil {
 			r.updateStatus(r.Client, veleroExport, err)
-			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+			return ctrl.Result{Requeue: true}, err
 		}
-
 		err = r.updateVeleroExportLabel(r.Client, veleroExport, veleroPlan)
+		if err != nil && errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		if err != nil {
 			r.updateStatus(r.Client, veleroExport, err)
 			return ctrl.Result{Requeue: true}, err
 		}
 
 		r.updateStatus(r.Client, veleroExport, nil)
+
 		return ctrl.Result{Requeue: true}, err
 	}
 
