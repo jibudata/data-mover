@@ -180,6 +180,7 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 		return err
 	}
 	o.logger.Info(fmt.Sprintf("Patch pv %s with retain option", pvName))
+	time.Sleep(time.Duration(1) * time.Second)
 
 	// delete pvc
 	err = o.client.Delete(context.TODO(), pvc)

@@ -428,7 +428,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			}
 		}
-		r.updateStatus(r.Client, veleroExport, err)
+		err = r.updateStatus(r.Client, veleroExport, err)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+		}
 		return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 	}
 
@@ -441,7 +444,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
-		r.updateStatus(r.Client, veleroExport, nil)
+		err = r.updateStatus(r.Client, veleroExport, nil)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+		}
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
@@ -476,7 +482,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		r.updateStatus(r.Client, veleroExport, nil)
 
-		return ctrl.Result{Requeue: true}, err
+		return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseWaitFileSystemCopyComplete {
