@@ -110,14 +110,42 @@ func (o *Operation) CreatePvcsWithPv(vsrl []*VolumeSnapshotResource, backupNs st
 	return nil
 }
 
-// Create pod with pvc
-func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace string) error {
-
+func (o *Operation) getPvc(name string, namespace string) (*core.PersistentVolumeClaim, error) {
 	pvc := &core.PersistentVolumeClaim{}
 	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: namespace,
-		Name:      vsr.PersistentVolumeClaimName,
+		Name:      name,
 	}, pvc)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
+		return nil, err
+	}
+	return pvc, nil
+}
+
+func (o *Operation) isPvcDeleted(name string, namespace string) (bool, error) {
+	pvc := &core.PersistentVolumeClaim{}
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, pvc)
+	if err != nil && errors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	deleted, err := o.isPvcDeleted(name, namespace)
+	if err == nil && !deleted {
+		time.Sleep(time.Duration(2) * time.Second)
+		deleted, err = o.isPvcDeleted(name, namespace)
+	}
+	return true, nil
+}
+
+// Create pod with pvc
+func (o *Operation) DeletePvcWithVs(vsr *VolumeSnapshotResource, namespace string) error {
+	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
 		return err
@@ -130,10 +158,7 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 
 	if pvc.Spec.VolumeName == "" {
 		time.Sleep(time.Duration(5) * time.Second)
-		err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
-			Namespace: namespace,
-			Name:      vsr.PersistentVolumeClaimName,
-		}, pvc)
+		pvc, err = o.getPvc(vsr.PersistentVolumeClaimName, namespace)
 		if err != nil {
 			o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
 			return err
@@ -162,7 +187,12 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 		o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", pvc.Name))
 		return err
 	}
+	_, err = o.isPvcDeleted(vsr.PersistentVolumeClaimName, namespace)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("delete pvc %s failure", pvc.Name))
+	}
 	o.logger.Info(fmt.Sprintf("Deleted pvc %s", pvc.Name))
+
 	// update pv to remove reference
 	err = o.UpdatePV(pvName, namespace)
 	if err != nil {
