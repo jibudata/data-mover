@@ -198,7 +198,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.Log.Info("Get filesystem copy backup ...")
 		// Call velero to backup namespace using filesystem copy
 		backup, err = handler.GetVeleroBackup(backupName, veleroNamespace)
-		if err != nil {
+		if err != nil || backup == nil {
 			r.Log.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, err

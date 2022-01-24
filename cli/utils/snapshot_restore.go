@@ -30,7 +30,7 @@ func RestoreManager(client k8sclient.Client, backupName *string, ns *string) {
 	fmt.Println("=== Step 1. Get filesystem copy backup")
 	// Call velero to backup namespace using filesystem copy
 	backup, err := handler.GetVeleroBackup(*backupName, config.VeleroNamespace)
-	if err != nil {
+	if err != nil || backup == nil {
 		panic(err)
 	}
 	fmt.Println(backup.Name)
