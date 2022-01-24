@@ -144,7 +144,7 @@ func (o *Operation) isPvcDeleted(name string, namespace string) (bool, error) {
 }
 
 // Create pod with pvc
-func (o *Operation) DeletePvcWithVs(vsr *VolumeSnapshotResource, namespace string) error {
+func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace string) error {
 	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
