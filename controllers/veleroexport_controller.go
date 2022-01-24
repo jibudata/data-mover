@@ -447,7 +447,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroExport.Status.Phase == dmapi.PhaseStartFileSystemCopy {
 		bpName := veleroExport.Labels[config.SnapshotExportBackupName]
 		veleroPlan, err := opt.GetVeleroBackup(bpName, veleroNamespace)
-		if err != nil && errors.IsNotFound(err) {
+		if (err != nil && errors.IsNotFound(err)) || (veleroPlan == nil && err == nil) {
 			r.Log.Info("velero plan doesn't exist")
 			var backupNamespaces []string
 			for _, namespace := range includedNamespaces {
@@ -461,6 +461,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 			}
 
+		} else if err != nil {
+			r.updateStatus(r.Client, veleroExport, err)
+			return ctrl.Result{Requeue: true}, err
 		}
 		err = r.updateVeleroExportLabel(r.Client, veleroExport, veleroPlan)
 		if err != nil && errors.IsConflict(err) {
