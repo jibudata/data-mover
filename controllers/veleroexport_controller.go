@@ -132,18 +132,22 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroExport.Status.Phase == dmapi.PhaseCompleted ||
 		veleroExport.Status.State == dmapi.StateFailed {
-		stopTime := veleroExport.Status.StopTimestamp.Time
-		now := time.Now()
-		if now.After(stopTime) {
-			r.Log.Info("velero export expired", "now", now)
-			err = r.deleteVeleroExport(veleroExport)
-			if err != nil {
-				return ctrl.Result{Requeue: true}, err
+		if veleroExport.Status.StopTimestamp != nil {
+			stopTime := veleroExport.Status.StopTimestamp.Time
+			now := time.Now()
+			if now.After(stopTime) {
+				r.Log.Info("velero export expired", "now", now)
+				err = r.deleteVeleroExport(veleroExport)
+				if err != nil {
+					return ctrl.Result{Requeue: true}, err
+				}
+				return ctrl.Result{}, nil
+			} else {
+				duration := stopTime.Sub(now)
+				return ctrl.Result{RequeueAfter: duration}, nil
 			}
-			return ctrl.Result{}, nil
 		} else {
-			duration := stopTime.Sub(now)
-			return ctrl.Result{RequeueAfter: duration}, nil
+			return ctrl.Result{}, nil
 		}
 	}
 	_ = r.validatePolicy(veleroExport)
