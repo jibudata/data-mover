@@ -189,7 +189,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 		} else {
 			r.Log.Info("Snapshot Import Started")
-			r.UpdateStatus(veleroImport, nil, nil)
+			err = r.UpdateStatus(veleroImport, nil, nil)
+			if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
 	}
 
@@ -203,7 +206,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 		}
-		r.UpdateStatus(veleroImport, nil, nil)
+		err = r.UpdateStatus(veleroImport, nil, nil)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreTempNamespace {
@@ -215,10 +221,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false)
 		if err != nil {
 			r.UpdateStatus(veleroImport, nil, err)
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+			return ctrl.Result{}, err
 		}
 
 		r.UpdateStatus(veleroImport, restore, nil)
+		return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoringTempNamespace {
@@ -228,7 +235,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 		} else {
 			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
-			r.UpdateStatus(veleroImport, restore, nil)
+			err = r.UpdateStatus(veleroImport, restore, nil)
+			if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
 	}
 
@@ -239,11 +249,12 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if err != nil {
 				r.Log.Error(err, fmt.Sprintf("Failed to delete pod in given namespace %s: %s", tgtNamespace, err.Error()))
 				r.UpdateStatus(veleroImport, nil, err)
-				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				return ctrl.Result{}, err
 			}
 		}
 
 		r.UpdateStatus(veleroImport, nil, nil)
+		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseDeletingStagePod {
@@ -253,7 +264,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if !deleted {
 				return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 			} else {
-				r.UpdateStatus(veleroImport, nil, nil)
+				err = r.UpdateStatus(veleroImport, nil, nil)
+				if err != nil {
+					return ctrl.Result{Requeue: true}, err
+				}
 			}
 		}
 	}
@@ -264,9 +278,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err != nil {
 			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+			return ctrl.Result{}, err
 		}
 		r.UpdateStatus(veleroImport, restore, nil)
+		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoringOriginNamespace {
@@ -276,7 +291,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 		} else {
 			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
-			r.UpdateStatus(veleroImport, restore, nil)
+			err = r.UpdateStatus(veleroImport, restore, nil)
+			if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
 	}
 

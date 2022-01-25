@@ -7,6 +7,7 @@ import (
 
 	config "github.com/jibudata/data-mover/pkg/config"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -83,10 +84,10 @@ func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace st
 	}
 	var newBp *velero.Backup = &velero.Backup{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:       labels,
-			GenerateName: config.GenerateBackupName,
-			Namespace:    bp.Namespace,
-			Annotations:  annotation,
+			Labels:      labels,
+			Name:        config.VeleroBackupNamePrefix + backupName,
+			Namespace:   bp.Namespace,
+			Annotations: annotation,
 		},
 		Spec: velero.BackupSpec{
 			// IncludeClusterResources: includeClusterResources,
@@ -101,7 +102,10 @@ func (o *Operation) AsyncBackupNamespaceFc(backupName string, veleroNamespace st
 		},
 	}
 	err = o.client.Create(context.TODO(), newBp)
-	if err != nil {
+	if err != nil && errors.IsAlreadyExists(err) {
+		o.logger.Info("velero plan already exists", "plan name", newBp.Name)
+		return newBp, nil
+	} else if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to create velero backup plan %s", newBp.Name))
 		return nil, err
 	}
@@ -157,8 +161,8 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: config.GenerateRestoreName,
-			Namespace:    veleroNamespace,
+			Name:      config.VeleroRestoreNamePrefix + backupName,
+			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
 			BackupName:        backupName,
@@ -168,7 +172,10 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 		},
 	}
 	err := o.client.Create(context.TODO(), restore)
-	if err != nil {
+
+	if err != nil && errors.IsAlreadyExists(err) {
+		return restore, nil
+	} else if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
 		return nil, err
 	}
@@ -203,8 +210,8 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: config.GenerateRestoreName,
-			Namespace:    veleroNamespace,
+			Name:      config.VeleroRestoreNamePrefix + backupName,
+			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
 			BackupName:        backupName,
@@ -214,7 +221,9 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 		},
 	}
 	err := o.client.Create(context.TODO(), restore)
-	if err != nil {
+	if err != nil && errors.IsAlreadyExists(err) {
+		return restore, nil
+	} else if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
 		return nil, err
 	}
