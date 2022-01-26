@@ -52,9 +52,10 @@ const (
 
 // State
 const (
-	StateInProgress = "InProgress"
-	StateFailed     = "Failed"
-	StateCompleted  = "Completed"
+	StateInProgress   = "InProgress"
+	StateFailed       = "Failed"
+	StateCompleted    = "Completed"
+	StateVeleroFailed = "VeleroFailed"
 )
 
 //Requeue Time Definition

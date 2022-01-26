@@ -129,6 +129,26 @@ func (o *Operation) GetStagePodStatus(tempNs string) bool {
 	return running
 }
 
+func (o *Operation) GetStagePodState(tempNs string) core.PodPhase {
+	state := core.PodRunning
+	podList, err := o.getPodList(tempNs)
+	if err != nil {
+		return core.PodFailed
+	}
+
+	for _, pod := range podList {
+		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
+		if pod.Status.Phase == core.PodFailed || pod.Status.Phase == core.PodUnknown {
+			state = core.PodFailed
+			break
+		}
+		if pod.Status.Phase == core.PodPending {
+			state = core.PodPending
+		}
+	}
+	return state
+}
+
 func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
@@ -146,7 +166,7 @@ func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns
 	var existingPodMap = make(map[string]bool)
 	if existingPods != nil && len(existingPods) > 0 {
 		for _, pod := range existingPods {
-			name := pod.Name[:strings.LastIndex(pod.Name, "-")-1]
+			name := pod.Name[:strings.LastIndex(pod.Name, "-")]
 			existingPodMap[name] = true
 		}
 	}

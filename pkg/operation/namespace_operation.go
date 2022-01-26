@@ -27,7 +27,7 @@ func (o *Operation) CreateNamespace(ns string, forceRecreate bool) error {
 			}
 			err = o.client.Create(context.TODO(), &namespace)
 			if err != nil {
-				o.logger.Error(err, fmt.Sprintf("Failed to delete namespace %s", ns))
+				o.logger.Error(err, fmt.Sprintf("Failed to create namespace %s", ns))
 				return err
 			}
 			return nil

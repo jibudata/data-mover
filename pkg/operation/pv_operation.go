@@ -180,7 +180,7 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 		return err
 	}
 	o.logger.Info(fmt.Sprintf("Patch pv %s with retain option", pvName))
-	time.Sleep(time.Duration(1) * time.Second)
+	time.Sleep(time.Duration(2) * time.Second)
 
 	// delete pvc
 	err = o.client.Delete(context.TODO(), pvc)
@@ -218,6 +218,10 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 		},
 	}
 	err = o.createPvc(newPvc)
+	if err != nil {
+		o.logger.Error(err, "Failed to create PVC", "name", newPvc.Name)
+		return err
+	}
 	o.logger.Info(fmt.Sprintf("Create pvc %s in %s with pv %s", vsr.PersistentVolumeClaimName, namespace, pvName))
 
 	err = o.isPVCReady(namespace, vsr.PersistentVolumeClaimName)
