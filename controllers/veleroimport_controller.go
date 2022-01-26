@@ -101,7 +101,9 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 	}
 	if err != nil {
 		veleroImport.Status.Message = err.Error()
-		veleroImport.Status.State = dmapi.StateFailed
+		if veleroImport.Status.State != dmapi.StateVeleroFailed {
+			veleroImport.Status.State = dmapi.StateFailed
+		}
 		r.Log.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
 		veleroImport.Status.Message = ""
@@ -289,16 +291,34 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoringOriginNamespace {
 		r.Log.Info("Check original namespace restore status ...")
-		restored := handler.IsNamespaceRestored(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
-		if !restored {
-			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+		restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
+		if restore == nil {
+			r.UpdateStatus(veleroImport, nil, fmt.Errorf("failed to get velero restore"))
+			return ctrl.Result{}, err
 		} else {
-			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
-			err = r.UpdateStatus(veleroImport, restore, nil)
-			if err != nil {
-				return ctrl.Result{Requeue: true}, nil
+			if restore.Status.Phase == velero.RestorePhaseCompleted {
+				r.UpdateStatus(veleroImport, restore, nil)
+			} else if restore.Status.Phase == velero.RestorePhaseFailed ||
+				restore.Status.Phase == velero.RestorePhaseFailedValidation ||
+				restore.Status.Phase == velero.RestorePhasePartiallyFailed {
+				err = fmt.Errorf("Velero backup failed")
+				veleroImport.Status.State = dmapi.StateVeleroFailed
+				r.UpdateStatus(veleroImport, restore, err)
+				return ctrl.Result{}, err
+			} else {
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
+		// restored := handler.IsNamespaceRestored(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
+		// if !restored {
+		// 	return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+		// } else {
+		// 	restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
+		// 	err = r.UpdateStatus(veleroImport, restore, nil)
+		// 	if err != nil {
+		// 		return ctrl.Result{Requeue: true}, nil
+		// 	}
+		// }
 	}
 
 	// if veleroImport.Status.Phase == dmapi.PhaseCleanUp {

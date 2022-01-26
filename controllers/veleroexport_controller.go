@@ -525,6 +525,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			} else if bpPhase == velero.BackupPhasePartiallyFailed || bpPhase == velero.BackupPhaseFailed ||
 				bpPhase == velero.BackupPhaseFailedValidation {
 				err = fmt.Errorf("Velero backup failed")
+				veleroExport.Status.Phase = dmapi.StateVeleroFailed
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{}, err
 			} else {
@@ -592,7 +593,9 @@ func (r *VeleroExportReconciler) updateVeleroExportLabel(client k8sclient.Client
 func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExport *dmapi.VeleroExport, err error) error {
 	if err != nil {
 		veleroExport.Status.Message = err.Error()
-		veleroExport.Status.State = dmapi.StateFailed
+		if veleroExport.Status.State != dmapi.StateVeleroFailed {
+			veleroExport.Status.State = dmapi.StateFailed
+		}
 		r.Log.Error(err, "snapshot export failure", "phase", veleroExport.Status.Phase)
 	} else {
 		veleroExport.Status.Message = ""
