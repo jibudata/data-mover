@@ -130,8 +130,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
 	opt := ops.NewOperation(r.Log, r.Client)
 
-	if veleroExport.Status.Phase == dmapi.PhaseCompleted ||
-		veleroExport.Status.State == dmapi.StateFailed {
+	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
 		if veleroExport.Status.StopTimestamp != nil {
 			stopTime := veleroExport.Status.StopTimestamp.Time
 			now := time.Now()
@@ -173,9 +172,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroExport.Status.Phase == dmapi.PhasePrecheck {
 
 		err = r.precheck(r.Client, veleroExport, opt)
-		err = r.updateStatus(r.Client, veleroExport, err)
+		r.updateStatus(r.Client, veleroExport, err)
 		if err != nil {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -524,7 +523,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if bpPhase == velero.BackupPhaseCompleted {
 				r.updateStatus(r.Client, veleroExport, nil)
 			} else if bpPhase == velero.BackupPhasePartiallyFailed || bpPhase == velero.BackupPhaseFailed ||
-				bpPhase == velero.BackupPhaseFailedValidation || bpPhase == velero.BackupPhaseUploadingPartialFailure {
+				bpPhase == velero.BackupPhaseFailedValidation {
 				err = fmt.Errorf("Velero backup failed")
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{}, err

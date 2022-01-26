@@ -177,7 +177,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseInitial {
 		veleroImport.Status = dmapi.VeleroImportStatus{}
 		veleroImport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
-		r.UpdateStatus(veleroImport, nil, nil)
+		err = r.UpdateStatus(veleroImport, nil, nil)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhasePrecheck {
@@ -237,7 +240,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
 			err = r.UpdateStatus(veleroImport, restore, nil)
 			if err != nil {
-				return ctrl.Result{Requeue: true}, err
+				return ctrl.Result{Requeue: true}, nil
 			}
 		}
 	}
@@ -266,7 +269,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			} else {
 				err = r.UpdateStatus(veleroImport, nil, nil)
 				if err != nil {
-					return ctrl.Result{Requeue: true}, err
+					return ctrl.Result{Requeue: true}, nil
 				}
 			}
 		}
@@ -293,7 +296,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
 			err = r.UpdateStatus(veleroImport, restore, nil)
 			if err != nil {
-				return ctrl.Result{Requeue: true}, err
+				return ctrl.Result{Requeue: true}, nil
 			}
 		}
 	}
