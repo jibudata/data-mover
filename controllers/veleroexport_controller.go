@@ -525,7 +525,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			} else if bpPhase == velero.BackupPhasePartiallyFailed || bpPhase == velero.BackupPhaseFailed ||
 				bpPhase == velero.BackupPhaseFailedValidation {
 				err = fmt.Errorf("Velero backup failed")
-				veleroExport.Status.Phase = dmapi.StateVeleroFailed
+				veleroExport.Status.State = dmapi.StateVeleroFailed
 				r.updateStatus(r.Client, veleroExport, err)
 				return ctrl.Result{}, err
 			} else {
