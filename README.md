@@ -14,6 +14,8 @@ make build-cli
 
 ## Usage
 
+### CLI Example
+
 #### 备份数据
 
 ```
@@ -82,3 +84,42 @@ Deleted pod stage-wordpress-mysql-d9b8d8884-9g4r5-xzr8r
 === Step 5. Invoke velero to restore original namespace
 Created velero restore plan generate-restore-tfqhz
 ```
+
+### Use CR
+
+Other backup solution can use CR for API level integration with data mover, below are CR details.
+
+##### VeleroExport CR Spec
+
+| Param              | Type                    | Supported value           | Description                                                  |
+| ------------------ | ----------------------- | ------------------------- | ------------------------------------------------------------ |
+| VeleroBackupRef    | *corev1.ObjectReference | name: xxx, namespace: xxx | Object reference of Velero backup which backup the namespaces using snapshot copy method |
+| IncludedNamespaces | []string                | Any                       | Volumesnapshots in the namespaces will be exported           |
+| DataSourceMapping  | map[string]string       | Any                       | DataSourceMapping is a map of pvc names to volumesnapshot names to be exported. |
+| Policy             | ExportPolicy            | Retention: xx             | specify the veleroexport retention                           |
+
+##### VeleroExport Status
+
+| Status            | Description                                        |
+| ----------------- | -------------------------------------------------- |
+| StateInProgress   | Data export is in progress                         |
+| StateFailed       | Data export is Failed                              |
+| StateCompleted    | Data export is Completed                           |
+| StateVeleroFailed | Data export is Failed due to velero backup failure |
+
+##### VeleroImport CR Spec
+
+| Param            | Type                    | Supported value           | Description                                                  |
+| ---------------- | ----------------------- | ------------------------- | ------------------------------------------------------------ |
+| VeleroBackupRef  | *corev1.ObjectReference | name: xxx, namespace: xxx | Object reference of Velero backup which backup the namespaces using snapshot copy method |
+| NamespaceMapping | map[string]string       | any                       |                                                              |
+
+##### VeleroImport Status
+
+| Status            | Description                                        |
+| ----------------- | -------------------------------------------------- |
+| StateInProgress   | Data import is in progress                         |
+| StateFailed       | Data import is failed                              |
+| StateCompleted    | Data import is completed                           |
+| StateVeleroFailed | Data import is failed due to velero backup failure |
+
