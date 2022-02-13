@@ -48,6 +48,7 @@ type VeleroExportReconciler struct {
 const (
 	requeueAfterFast = 5 * time.Second
 	requeueAfterSlow = 20 * time.Second
+	timeout          = 60 * time.Minute
 )
 
 const (
@@ -130,7 +131,31 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
 	opt := ops.NewOperation(r.Log, r.Client)
 
-	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
+	if veleroExport.Status.State == dmapi.StateFailed {
+		now := time.Now()
+		if time.Duration(now.Sub(veleroExport.Status.StartTimestamp.Time)) >= timeout {
+			// bind volumesnapshot and volumesnapshot content in original namespaces
+			// err := r.updateSnapshotContentBack(veleroExport, opt, includedNamespaces)
+			// if err != nil {
+			// 	return ctrl.Result{}, err
+			// }
+
+			// clean up tempary namespaces
+			for _, namespace := range includedNamespaces {
+				tmpNamespace := config.TempNamespacePrefix + namespace
+				err = opt.AsyncDeleteNamespace(tmpNamespace)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			veleroExport.Status.State = dmapi.StateCanceled
+			err = r.Client.Status().Update(context.TODO(), veleroExport)
+			return ctrl.Result{Requeue: true}, err
+		}
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCompleted || veleroExport.Status.Phase == dmapi.StateCanceled {
 		if veleroExport.Status.StopTimestamp != nil {
 			stopTime := veleroExport.Status.StopTimestamp.Time
 			now := time.Now()
