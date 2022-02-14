@@ -48,7 +48,7 @@ type VeleroExportReconciler struct {
 const (
 	requeueAfterFast = 5 * time.Second
 	requeueAfterSlow = 20 * time.Second
-	timeout          = 60 * time.Minute
+	timeout          = 30 * time.Minute
 )
 
 const (
