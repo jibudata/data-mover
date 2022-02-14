@@ -654,22 +654,25 @@ func (r *VeleroExportReconciler) precheck(client k8sclient.Client, veleroExport 
 		err = fmt.Errorf("invalid backup plan %s.", vBackupRef.Name)
 	} else {
 		// check if any volumesnapshot
-		emptyVsList := true
+		vsMap := make(map[string]string)
 		for _, namespace := range veleroExport.Spec.IncludedNamespaces {
 			vsList, err := opt.GetVolumeSnapshotList(vBackupRef.Name, namespace)
 			if err != nil {
 				err = fmt.Errorf("validate backup failed, could not get volume snapshot for backup plan %s", vBackupRef.Name)
 				return err
 			} else {
-				if len(vsList.Items) > 0 {
-					emptyVsList = false
-					break
+				for _, volumesnapshot := range vsList.Items {
+					key := volumesnapshot.Namespace + "/" + *volumesnapshot.Spec.Source.PersistentVolumeClaimName
+					vsMap[key] = volumesnapshot.Name
 				}
 			}
 		}
-		if emptyVsList {
-			err = fmt.Errorf("empty volumesnapshot list to export")
-			return err
+
+		for key, _ := range veleroExport.Spec.DataSourceMapping {
+			if _, ok := vsMap[key]; !ok {
+				err = fmt.Errorf("volume snapshot for pvc %s doesn't exist", key)
+				return err
+			}
 		}
 	}
 	return err
