@@ -149,6 +149,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				}
 			}
 
+			r.Log.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
 			veleroExport.Status.State = dmapi.StateCanceled
 			err = r.Client.Status().Update(context.TODO(), veleroExport)
 			return ctrl.Result{Requeue: true}, err
