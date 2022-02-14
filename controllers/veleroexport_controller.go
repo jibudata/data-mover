@@ -118,7 +118,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return
 		}
 		veleroExport.Status.SetReconcileFailed(err)
-		err := r.Update(ctx, veleroExport)
+		err := r.Client.Status().Update(ctx, veleroExport)
 		if err != nil {
 			//r.Log.Error(err, "")
 			return
@@ -152,11 +152,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			r.Log.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
 			veleroExport.Status.State = dmapi.StateCanceled
 			err = r.Client.Status().Update(context.TODO(), veleroExport)
-			return ctrl.Result{Requeue: true}, err
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 		}
 	}
 
-	if veleroExport.Status.Phase == dmapi.PhaseCompleted || veleroExport.Status.Phase == dmapi.StateCanceled {
+	if veleroExport.Status.Phase == dmapi.PhaseCompleted || veleroExport.Status.State == dmapi.StateCanceled {
 		if veleroExport.Status.StopTimestamp != nil {
 			stopTime := veleroExport.Status.StopTimestamp.Time
 			now := time.Now()
