@@ -48,6 +48,7 @@ type VeleroExportReconciler struct {
 const (
 	requeueAfterFast = 5 * time.Second
 	requeueAfterSlow = 20 * time.Second
+	timeout          = 30 * time.Minute
 )
 
 const (
@@ -117,7 +118,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return
 		}
 		veleroExport.Status.SetReconcileFailed(err)
-		err := r.Update(ctx, veleroExport)
+		err := r.Client.Status().Update(ctx, veleroExport)
 		if err != nil {
 			//r.Log.Error(err, "")
 			return
@@ -130,7 +131,35 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroNamespace := veleroExport.Spec.VeleroBackupRef.Namespace
 	opt := ops.NewOperation(r.Log, r.Client)
 
-	if veleroExport.Status.Phase == dmapi.PhaseCompleted {
+	if veleroExport.Status.State == dmapi.StateFailed {
+		now := time.Now()
+		if time.Duration(now.Sub(veleroExport.Status.StartTimestamp.Time)) >= timeout {
+			// bind volumesnapshot and volumesnapshot content in original namespaces
+			// err := r.updateSnapshotContentBack(veleroExport, opt, includedNamespaces)
+			// if err != nil {
+			// 	return ctrl.Result{}, err
+			// }
+
+			// clean up tempary namespaces
+			for _, namespace := range includedNamespaces {
+				tmpNamespace := config.TempNamespacePrefix + namespace
+				err = opt.AsyncDeleteNamespace(tmpNamespace)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			r.Log.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
+			veleroExport.Status.State = dmapi.StateCanceled
+			err = r.Client.Status().Update(context.TODO(), veleroExport)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
+		}
+	}
+
+	if veleroExport.Status.Phase == dmapi.PhaseCompleted || veleroExport.Status.State == dmapi.StateCanceled {
 		if veleroExport.Status.StopTimestamp != nil {
 			stopTime := veleroExport.Status.StopTimestamp.Time
 			now := time.Now()
@@ -629,22 +658,25 @@ func (r *VeleroExportReconciler) precheck(client k8sclient.Client, veleroExport 
 		err = fmt.Errorf("invalid backup plan %s.", vBackupRef.Name)
 	} else {
 		// check if any volumesnapshot
-		emptyVsList := true
+		vsMap := make(map[string]string)
 		for _, namespace := range veleroExport.Spec.IncludedNamespaces {
 			vsList, err := opt.GetVolumeSnapshotList(vBackupRef.Name, namespace)
 			if err != nil {
 				err = fmt.Errorf("validate backup failed, could not get volume snapshot for backup plan %s", vBackupRef.Name)
 				return err
 			} else {
-				if len(vsList.Items) > 0 {
-					emptyVsList = false
-					break
+				for _, volumesnapshot := range vsList.Items {
+					key := volumesnapshot.Namespace + "/" + *volumesnapshot.Spec.Source.PersistentVolumeClaimName
+					vsMap[key] = volumesnapshot.Name
 				}
 			}
 		}
-		if emptyVsList {
-			err = fmt.Errorf("empty volumesnapshot list to export")
-			return err
+
+		for key, _ := range veleroExport.Spec.DataSourceMapping {
+			if _, ok := vsMap[key]; !ok {
+				err = fmt.Errorf("volume snapshot for pvc %s doesn't exist", key)
+				return err
+			}
 		}
 	}
 	return err
