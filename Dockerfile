@@ -26,6 +26,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 FROM jibutech/ubi8-minimal:latest
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY VERSION VERSION
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

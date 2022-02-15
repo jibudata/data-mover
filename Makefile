@@ -63,6 +63,8 @@ build-cli:
 	 go build -o bin/data-mover-cli cli/data-mover-cli.go
 
 build: generate fmt vet ## Build manager binary.
+	git show --oneline -s > VERSION
+	echo "compiled time: `date`" >> VERSION
 	go build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
