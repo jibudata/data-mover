@@ -56,6 +56,7 @@ const (
 	StateFailed       = "Failed"
 	StateCompleted    = "Completed"
 	StateVeleroFailed = "VeleroFailed"
+	StateCanceled     = "Canceled"
 )
 
 //Requeue Time Definition

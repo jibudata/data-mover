@@ -25,7 +25,9 @@ func (o *Operation) GetVeleroBackup(backupName string, veleroNamespace string) (
 	}
 	err := o.client.List(context.TODO(), backups, options)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
+		if !errors.IsNotFound(err) {
+			o.logger.Error(err, fmt.Sprintf("Failed to list velero backup plan %s", backupName))
+		}
 		return nil, err
 	}
 	if len(backups.Items) > 0 {
