@@ -51,6 +51,7 @@ const (
 
 	// Failure Message
 	MessageObjectNotFound = "Object Not Found"
+	DataImportLabel       = "data-import-name"
 )
 
 var veleroImportSteps = []dmapi.Step{
@@ -223,7 +224,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for srcNamespace, tgtNamespace := range namespaceMapping {
 			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
 		}
-		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false)
+		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, veleroImport.Labels[DataImportLabel])
 		if err != nil {
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{}, err
@@ -298,7 +299,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		r.Log.Info("Start invoking velero to restore original namespace ...")
-		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false)
+		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, "orig-"+veleroImport.Labels[DataImportLabel])
 		if err != nil {
 			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)

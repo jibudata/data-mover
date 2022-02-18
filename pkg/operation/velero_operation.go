@@ -147,7 +147,7 @@ func (o *Operation) GetCompletedBackup(backupName string, veleroNamespace string
 	// TBD: add timeout
 }
 
-func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (*velero.Restore, error) {
+func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool, dataImportName string) (*velero.Restore, error) {
 
 	excludedResources := []string{
 		"nodes",
@@ -163,7 +163,7 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.VeleroRestoreNamePrefix + backupName,
+			Name:      config.VeleroRestoreNamePrefix + dataImportName,
 			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
@@ -185,8 +185,8 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	return restore, nil
 }
 
-func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (string, error) {
-	restore, err := o.AsyncRestoreNamespaces(backupName, veleroNamespace, namespaceMapping, excludePV)
+func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool, dataImportName string) (string, error) {
+	restore, err := o.AsyncRestoreNamespaces(backupName, veleroNamespace, namespaceMapping, excludePV, dataImportName)
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +194,7 @@ func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace str
 	return restore.Name, nil
 }
 
-// Restore original namespace using velero
+// Restore original namespace using velero, only for CLI
 func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)
 	nsMapping[srcNamespace] = tgtNamespace
@@ -212,8 +212,8 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.VeleroRestoreNamePrefix + backupName,
-			Namespace: veleroNamespace,
+			GenerateName: config.VeleroRestoreNamePrefix + backupName + "-",
+			Namespace:    veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
 			BackupName:        backupName,
