@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -224,7 +225,13 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for srcNamespace, tgtNamespace := range namespaceMapping {
 			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
 		}
-		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, veleroImport.Labels[DataImportLabel])
+
+		suffix, ok := veleroImport.Labels[DataImportLabel]
+		if !ok {
+			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+		}
+
+		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, suffix)
 		if err != nil {
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{}, err
@@ -299,7 +306,13 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		r.Log.Info("Start invoking velero to restore original namespace ...")
-		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, "orig-"+veleroImport.Labels[DataImportLabel])
+		suffix, ok := veleroImport.Labels[DataImportLabel]
+		if !ok {
+			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+		} else {
+			suffix = "orig-" + suffix
+		}
+		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
 		if err != nil {
 			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
