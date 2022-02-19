@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
 	config "github.com/jibudata/data-mover/pkg/config"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +14,10 @@ import (
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	DataImportLabel = "data-import-name"
 )
 
 func (o *Operation) GetVeleroBackup(backupName string, veleroNamespace string) (*velero.Backup, error) {
@@ -211,7 +216,7 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 		excludedResources = append(excludedResources, "persistentvolumeclaims")
 		excludedResources = append(excludedResources, "persistentvolumes")
 	}
-	suffix := strconv.FormatUint(uint64(time.Now().Unix()), 10)
+	suffix := o.GetRestoreJobSuffix(nil)
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      config.VeleroRestoreNamePrefix + suffix,
@@ -290,4 +295,18 @@ func (o *Operation) GetVeleroBackupUID(client k8sclient.Client, jobUID types.UID
 	}
 
 	return nil, nil
+}
+
+func (o *Operation) GetRestoreJobSuffix(veleroImport *dmapi.VeleroImport) string {
+	var suffix string
+	if veleroImport == nil || veleroImport.Labels == nil {
+		suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+	} else {
+		if _, ok := veleroImport.Labels[DataImportLabel]; !ok {
+			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+		} else {
+			suffix = veleroImport.Labels[DataImportLabel]
+		}
+	}
+	return suffix
 }

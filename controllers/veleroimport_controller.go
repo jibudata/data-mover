@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -232,7 +231,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
 		}
 
-		suffix := r.GetRestoreJobSuffix(veleroImport)
+		suffix := handler.GetRestoreJobSuffix(veleroImport)
 		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, suffix)
 		if err != nil {
 			r.UpdateStatus(veleroImport, nil, err)
@@ -308,7 +307,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		r.Log.Info("Start invoking velero to restore original namespace ...")
-		suffix := "orig-" + r.GetRestoreJobSuffix(veleroImport)
+		suffix := "orig-" + handler.GetRestoreJobSuffix(veleroImport)
 		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
 		if err != nil {
 			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
@@ -388,18 +387,4 @@ func (r *VeleroImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		&source.Kind{Type: &dmapi.VeleroImport{}},
 		&handler.EnqueueRequestForObject{})
 	return err
-}
-
-func (r *VeleroImportReconciler) GetRestoreJobSuffix(veleroImport *dmapi.VeleroImport) string {
-	var suffix string
-	if veleroImport.Labels == nil {
-		suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
-	} else {
-		if _, ok := veleroImport.Labels[DataImportLabel]; !ok {
-			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
-		} else {
-			suffix = veleroImport.Labels[DataImportLabel]
-		}
-	}
-	return suffix
 }
