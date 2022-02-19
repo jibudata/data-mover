@@ -51,12 +51,13 @@ const (
 
 	// Failure Message
 	MessageObjectNotFound = "Object Not Found"
+	DataImportLabel       = "data-import-name"
 )
 
 var veleroImportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseInitial},
 	{Phase: dmapi.PhasePrecheck},
-	{Phase: dmapi.PhaseRetrieveFileSystemCopy},
+	// {Phase: dmapi.PhaseRetrieveFileSystemCopy},
 	{Phase: dmapi.PhaseRestoreTempNamespace},
 	{Phase: dmapi.PhaseRestoringTempNamespace},
 	{Phase: dmapi.PhaseDeleteStagePod},
@@ -71,7 +72,7 @@ var veleroImportSteps = []dmapi.Step{
 var veleroImportSnapshotSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseInitial},
 	{Phase: dmapi.PhasePrecheck},
-	{Phase: dmapi.PhaseRetrieveFileSystemCopy},
+	// {Phase: dmapi.PhaseRetrieveFileSystemCopy},
 	{Phase: dmapi.PhaseRestoreTempNamespace},
 	{Phase: dmapi.PhaseRestoringTempNamespace},
 	{Phase: dmapi.PhaseDeleteStagePod},
@@ -201,29 +202,37 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	var backup *velero.Backup
-	if veleroImport.Status.Phase == dmapi.PhaseRetrieveFileSystemCopy {
-		r.Log.Info("Get filesystem copy backup ...")
-		// Call velero to backup namespace using filesystem copy
-		backup, err = handler.GetVeleroBackup(backupName, veleroNamespace)
+	// var backup *velero.Backup
+	// if veleroImport.Status.Phase == dmapi.PhaseRetrieveFileSystemCopy {
+	// 	r.Log.Info("Get filesystem copy backup ...")
+	// 	// Call velero to backup namespace using filesystem copy
+	// 	backup, err = handler.GetVeleroBackup(backupName, veleroNamespace)
+	// 	if err != nil || backup == nil {
+	// 		r.Log.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
+	// 		r.UpdateStatus(veleroImport, nil, err)
+	// 		return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+	// 	}
+	// 	err = r.UpdateStatus(veleroImport, nil, nil)
+	// 	if err != nil {
+	// 		return ctrl.Result{Requeue: true}, err
+	// 	}
+	// }
+
+	if veleroImport.Status.Phase == dmapi.PhaseRestoreTempNamespace {
+		r.Log.Info("Start invoking velero to restore the temporary namespace to given namespace ...")
+		backup, err := handler.GetVeleroBackup(backupName, veleroNamespace)
 		if err != nil || backup == nil {
 			r.Log.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 		}
-		err = r.UpdateStatus(veleroImport, nil, nil)
-		if err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
-	}
-
-	if veleroImport.Status.Phase == dmapi.PhaseRestoreTempNamespace {
-		r.Log.Info("Start invoking velero to restore the temporary namespace to given namespace ...")
 		fcNamespaceMapping := make(map[string]string)
 		for srcNamespace, tgtNamespace := range namespaceMapping {
 			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
 		}
-		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false)
+
+		suffix := handler.GetRestoreJobSuffix(veleroImport)
+		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, suffix)
 		if err != nil {
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{}, err
@@ -298,7 +307,8 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		r.Log.Info("Start invoking velero to restore original namespace ...")
-		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false)
+		suffix := "orig-" + handler.GetRestoreJobSuffix(veleroImport)
+		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
 		if err != nil {
 			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)

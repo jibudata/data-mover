@@ -3,8 +3,10 @@ package operation
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
+	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
 	config "github.com/jibudata/data-mover/pkg/config"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -12,6 +14,10 @@ import (
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	DataImportLabel = "data-import-name"
 )
 
 func (o *Operation) GetVeleroBackup(backupName string, veleroNamespace string) (*velero.Backup, error) {
@@ -147,7 +153,7 @@ func (o *Operation) GetCompletedBackup(backupName string, veleroNamespace string
 	// TBD: add timeout
 }
 
-func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (*velero.Restore, error) {
+func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool, dataImportName string) (*velero.Restore, error) {
 
 	excludedResources := []string{
 		"nodes",
@@ -163,7 +169,7 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	}
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.VeleroRestoreNamePrefix + backupName,
+			Name:      config.VeleroRestoreNamePrefix + dataImportName,
 			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
@@ -185,8 +191,8 @@ func (o *Operation) AsyncRestoreNamespaces(backupName string, veleroNamespace st
 	return restore, nil
 }
 
-func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool) (string, error) {
-	restore, err := o.AsyncRestoreNamespaces(backupName, veleroNamespace, namespaceMapping, excludePV)
+func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace string, namespaceMapping map[string]string, excludePV bool, dataImportName string) (string, error) {
+	restore, err := o.AsyncRestoreNamespaces(backupName, veleroNamespace, namespaceMapping, excludePV, dataImportName)
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +200,7 @@ func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace str
 	return restore.Name, nil
 }
 
-// Restore original namespace using velero
+// Restore original namespace using velero, only for CLIpkg/config/constants.go
 func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)
 	nsMapping[srcNamespace] = tgtNamespace
@@ -210,9 +216,10 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 		excludedResources = append(excludedResources, "persistentvolumeclaims")
 		excludedResources = append(excludedResources, "persistentvolumes")
 	}
+	suffix := o.GetRestoreJobSuffix(nil)
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.VeleroRestoreNamePrefix + backupName,
+			Name:      config.VeleroRestoreNamePrefix + suffix,
 			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
@@ -288,4 +295,18 @@ func (o *Operation) GetVeleroBackupUID(client k8sclient.Client, jobUID types.UID
 	}
 
 	return nil, nil
+}
+
+func (o *Operation) GetRestoreJobSuffix(veleroImport *dmapi.VeleroImport) string {
+	var suffix string
+	if veleroImport == nil || veleroImport.Labels == nil {
+		suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+	} else {
+		if _, ok := veleroImport.Labels[DataImportLabel]; !ok {
+			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
+		} else {
+			suffix = veleroImport.Labels[DataImportLabel]
+		}
+	}
+	return suffix
 }
