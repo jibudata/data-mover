@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	config "github.com/jibudata/data-mover/pkg/config"
@@ -194,7 +195,7 @@ func (o *Operation) SyncRestoreNamespaces(backupName string, veleroNamespace str
 	return restore.Name, nil
 }
 
-// Restore original namespace using velero, only for CLI
+// Restore original namespace using velero, only for CLIpkg/config/constants.go
 func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace string, srcNamespace string, tgtNamespace string) (*velero.Restore, error) {
 	nsMapping := make(map[string]string)
 	nsMapping[srcNamespace] = tgtNamespace
@@ -210,10 +211,11 @@ func (o *Operation) AsyncRestoreNamespace(backupName string, veleroNamespace str
 		excludedResources = append(excludedResources, "persistentvolumeclaims")
 		excludedResources = append(excludedResources, "persistentvolumes")
 	}
+	suffix := strconv.FormatUint(uint64(time.Now().Unix()), 10)
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: config.VeleroRestoreNamePrefix + backupName + "-",
-			Namespace:    veleroNamespace,
+			Name:      config.VeleroRestoreNamePrefix + suffix,
+			Namespace: veleroNamespace,
 		},
 		Spec: velero.RestoreSpec{
 			BackupName:        backupName,
