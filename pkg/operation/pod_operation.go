@@ -166,7 +166,7 @@ func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns
 	var existingPodMap = make(map[string]bool)
 	if existingPods != nil && len(existingPods) > 0 {
 		for _, pod := range existingPods {
-			name := pod.Name[:strings.LastIndex(pod.Name, "-")]
+			name := pod.Name[len(stagePodNamePrefix):]
 			existingPodMap[name] = true
 		}
 	}
@@ -206,8 +206,8 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 	newPod := &StagePod{
 		Pod: core.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    namespace,
-				GenerateName: truncateName(stagePodNamePrefix+ref.Name) + "-",
+				Namespace: namespace,
+				Name:      truncateName(stagePodNamePrefix + ref.Name),
 			},
 			Spec: core.PodSpec{
 				Containers: []core.Container{},
