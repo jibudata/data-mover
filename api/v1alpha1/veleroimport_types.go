@@ -32,6 +32,9 @@ type VeleroImportSpec struct {
 	// Exported velero backupjob name with file system copy
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
+	// Data Import Reference
+	DataImportRef *corev1.ObjectReference `json:"dataImportRef"`
+
 	// Namespace that is backuped by velero
 	// IncludedNamespaces []string `json:"includedNamespaces"`
 
