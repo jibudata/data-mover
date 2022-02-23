@@ -657,10 +657,9 @@ func (r *VeleroExportReconciler) updateStatus(client k8sclient.Client, veleroExp
 		}
 	}
 	result := r.Client.Status().Update(context.TODO(), veleroExport)
-	if result != nil {
+	if result == nil {
 		r.Log.Info("snapshot export status update", "phase", veleroExport.Status.Phase, "state", veleroExport.Status.State)
 	}
-
 	return result
 }
 
