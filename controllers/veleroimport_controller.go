@@ -177,10 +177,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	err = r.Validate(veleroImport, handler)
+	err = r.Validate(ctx, veleroImport, handler)
 	if err != nil {
 		logger.Info("Validate failure", "velero import name", veleroImport.Name, "error", err)
-		r.UpdateStatus(veleroImport, nil, err)
+		r.UpdateStatus(ctx, veleroImport, nil, err)
 		return ctrl.Result{}, err
 	}
 
@@ -188,7 +188,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		veleroImport.Status = dmapi.VeleroImportStatus{}
 		veleroImport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
 		logger.Info("Snapshot Import Started")
-		err = r.UpdateStatus(veleroImport, nil, nil)
+		err = r.UpdateStatus(ctx, veleroImport, nil, nil)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -199,7 +199,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		backup, err := handler.GetVeleroBackup(backupName, veleroNamespace)
 		if err != nil || backup == nil {
 			logger.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
-			r.UpdateStatus(veleroImport, nil, err)
+			r.UpdateStatus(ctx, veleroImport, nil, err)
 			return ctrl.Result{}, err
 		}
 		fcNamespaceMapping := make(map[string]string)
@@ -210,11 +210,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		suffix := handler.GetRestoreJobSuffix(veleroImport)
 		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, suffix)
 		if err != nil {
-			r.UpdateStatus(veleroImport, nil, err)
+			r.UpdateStatus(ctx, veleroImport, nil, err)
 			return ctrl.Result{}, err
 		}
 
-		r.UpdateStatus(veleroImport, restore, nil)
+		r.UpdateStatus(ctx, veleroImport, restore, nil)
 		return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 	}
 
@@ -222,17 +222,17 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("Check original namespace restore status ...")
 		restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
 		if restore == nil {
-			r.UpdateStatus(veleroImport, nil, fmt.Errorf("failed to get velero restore"))
+			r.UpdateStatus(ctx, veleroImport, nil, fmt.Errorf("failed to get velero restore"))
 			return ctrl.Result{}, err
 		} else {
 			if restore.Status.Phase == velero.RestorePhaseCompleted {
-				r.UpdateStatus(veleroImport, restore, nil)
+				r.UpdateStatus(ctx, veleroImport, restore, nil)
 			} else if restore.Status.Phase == velero.RestorePhaseFailed ||
 				restore.Status.Phase == velero.RestorePhaseFailedValidation ||
 				restore.Status.Phase == velero.RestorePhasePartiallyFailed {
 				err = fmt.Errorf("velero backup failed")
 				veleroImport.Status.State = dmapi.StateVeleroFailed
-				r.UpdateStatus(veleroImport, restore, err)
+				r.UpdateStatus(ctx, veleroImport, restore, err)
 				return ctrl.Result{}, err
 			} else {
 				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
@@ -246,12 +246,12 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			err = handler.AsyncDeleteStagePod(tgtNamespace)
 			if err != nil {
 				logger.Error(err, fmt.Sprintf("Failed to delete pod in given namespace %s: %s", tgtNamespace, err.Error()))
-				r.UpdateStatus(veleroImport, nil, err)
+				r.UpdateStatus(ctx, veleroImport, nil, err)
 				return ctrl.Result{}, err
 			}
 		}
 
-		r.UpdateStatus(veleroImport, nil, nil)
+		r.UpdateStatus(ctx, veleroImport, nil, nil)
 		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 	}
 
@@ -262,7 +262,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if !deleted {
 				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			} else {
-				err = r.UpdateStatus(veleroImport, nil, nil)
+				err = r.UpdateStatus(ctx, veleroImport, nil, nil)
 				if err != nil {
 					return ctrl.Result{Requeue: true}, nil
 				}
@@ -276,10 +276,10 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
 		if err != nil {
 			logger.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
-			r.UpdateStatus(veleroImport, nil, err)
+			r.UpdateStatus(ctx, veleroImport, nil, err)
 			return ctrl.Result{}, err
 		}
-		r.UpdateStatus(veleroImport, restore, nil)
+		r.UpdateStatus(ctx, veleroImport, restore, nil)
 		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 	}
 
@@ -290,7 +290,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
 		} else {
 			restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
-			err = r.UpdateStatus(veleroImport, restore, nil)
+			err = r.UpdateStatus(ctx, veleroImport, restore, nil)
 			if err != nil {
 				return ctrl.Result{Requeue: true}, nil
 			}
@@ -300,14 +300,14 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
-func (r *VeleroImportReconciler) Validate(veleroImport *dmapi.VeleroImport, handler *operation.Operation) error {
+func (r *VeleroImportReconciler) Validate(ctx context.Context, veleroImport *dmapi.VeleroImport, handler *operation.Operation) error {
 	// Check veleroBackupRef existance
 	backupRef := veleroImport.Spec.VeleroBackupRef
 	if !handler.RefSet(backupRef) {
 		err := fmt.Errorf("invalid velero backup reference %s", veleroImport.Name)
 		return err
 	}
-	logger.Info("Validate()", "backupRef.Name", backupRef.Name, "backupRef.Namespace", backupRef.Namespace)
+	// logger.Info("Validate()", "backupRef.Name", backupRef.Name, "backupRef.Namespace", backupRef.Namespace)
 	backup, err := handler.GetBackupPlan(backupRef.Name, backupRef.Namespace)
 	if err != nil || backup.Status.Phase != velero.BackupPhaseCompleted || !*backup.Spec.SnapshotVolumes {
 		err = fmt.Errorf("invalid backup plan %s", backupRef.Name)
