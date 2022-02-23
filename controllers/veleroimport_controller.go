@@ -55,8 +55,6 @@ const (
 
 var veleroImportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseInitial},
-	{Phase: dmapi.PhasePrecheck},
-	// {Phase: dmapi.PhaseRetrieveFileSystemCopy},
 	{Phase: dmapi.PhaseRestoreTempNamespace},
 	{Phase: dmapi.PhaseRestoringTempNamespace},
 	{Phase: dmapi.PhaseDeleteStagePod},
@@ -70,8 +68,6 @@ var veleroImportSteps = []dmapi.Step{
 
 var veleroImportSnapshotSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseInitial},
-	{Phase: dmapi.PhasePrecheck},
-	// {Phase: dmapi.PhaseRetrieveFileSystemCopy},
 	{Phase: dmapi.PhaseRestoreTempNamespace},
 	{Phase: dmapi.PhaseRestoringTempNamespace},
 	{Phase: dmapi.PhaseDeleteStagePod},
@@ -95,7 +91,8 @@ func getRestoreObjectReference(restore *velero.Restore) *corev1.ObjectReference 
 	}
 }
 
-func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, restore *velero.Restore, err error) error {
+func (r *VeleroImportReconciler) UpdateStatus(ctx context.Context, veleroImport *dmapi.VeleroImport, restore *velero.Restore, err error) error {
+	logger := log.FromContext(ctx)
 	if restore != nil {
 		veleroImport.Status.VeleroRestoreRef = getRestoreObjectReference(restore)
 	}
@@ -104,7 +101,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 		if veleroImport.Status.State != dmapi.StateVeleroFailed {
 			veleroImport.Status.State = dmapi.StateFailed
 		}
-		r.Log.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
+		logger.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
 		veleroImport.Status.Message = ""
 		veleroImport.Status.Phase = r.nextPhase(veleroImport.Status.Phase)
@@ -115,7 +112,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 			veleroImport.Status.State = dmapi.StateInProgress
 		}
 	}
-	r.Log.Info("snapshot import status update", "phase", veleroImport.Status.Phase, "state", veleroImport.Status.State)
+	logger.Info("snapshot import status update", "phase", veleroImport.Status.Phase, "state", veleroImport.Status.State)
 	err = r.Client.Status().Update(context.TODO(), veleroImport)
 	return err
 }
@@ -138,7 +135,7 @@ func (r *VeleroImportReconciler) UpdateStatus(veleroImport *dmapi.VeleroImport, 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
 	var err error
 
@@ -146,7 +143,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroImport := &dmapi.VeleroImport{}
 	err = r.Get(ctx, req.NamespacedName, veleroImport)
 	if err != nil {
-		r.Log.Error(err, MessageObjectNotFound)
+		logger.Error(err, MessageObjectNotFound)
 		return ctrl.Result{Requeue: true}, nil
 	}
 	if veleroImport.Spec.SnapshotOnly {
@@ -163,7 +160,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		veleroImport.Status.SetReconcileFailed(err)
 		err := r.Update(ctx, veleroImport)
 		if err != nil {
-			r.Log.Error(err, "")
+			logger.Error(err, "")
 			return
 		}
 	}()
@@ -176,13 +173,13 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	handler := operation.NewOperation(r.Log, r.Client)
 
 	if veleroImport.Status.Phase == dmapi.PhaseCompleted || veleroImport.Status.State == dmapi.StateVeleroFailed {
-		r.Log.Info("Restore " + veleroImport.Status.State)
+		logger.Info("Restore " + veleroImport.Status.State)
 		return ctrl.Result{}, nil
 	}
 
 	err = r.Validate(veleroImport, handler)
 	if err != nil {
-		r.Log.Error(err, fmt.Sprintf("Validate failure for %s: %s", veleroImport.Name, err.Error()))
+		logger.Info("Validate failure", "velero import name", veleroImport.Name, "error", err)
 		r.UpdateStatus(veleroImport, nil, err)
 		return ctrl.Result{}, err
 	}
@@ -190,18 +187,18 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseInitial {
 		veleroImport.Status = dmapi.VeleroImportStatus{}
 		veleroImport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
+		logger.Info("Snapshot Import Started")
 		err = r.UpdateStatus(veleroImport, nil, nil)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		r.Log.Info("Snapshot Import Started")
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreTempNamespace {
-		r.Log.Info("Start invoking velero to restore the temporary namespace to given namespace ...")
+		logger.Info("Start invoking velero to restore the temporary namespace to given namespace ...")
 		backup, err := handler.GetVeleroBackup(backupName, veleroNamespace)
 		if err != nil || backup == nil {
-			r.Log.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
+			logger.Error(err, fmt.Sprintf("Failed to get velero backup %s: %s", backupName, err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{}, err
 		}
@@ -222,7 +219,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoringTempNamespace {
-		r.Log.Info("Check original namespace restore status ...")
+		logger.Info("Check original namespace restore status ...")
 		restore := handler.GetVeleroRestore(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
 		if restore == nil {
 			r.UpdateStatus(veleroImport, nil, fmt.Errorf("failed to get velero restore"))
@@ -244,11 +241,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseDeleteStagePod {
-		r.Log.Info("Start delete pod in given namespace ...")
+		logger.Info("Start delete pod in given namespace ...")
 		for _, tgtNamespace := range namespaceMapping {
 			err = handler.AsyncDeleteStagePod(tgtNamespace)
 			if err != nil {
-				r.Log.Error(err, fmt.Sprintf("Failed to delete pod in given namespace %s: %s", tgtNamespace, err.Error()))
+				logger.Error(err, fmt.Sprintf("Failed to delete pod in given namespace %s: %s", tgtNamespace, err.Error()))
 				r.UpdateStatus(veleroImport, nil, err)
 				return ctrl.Result{}, err
 			}
@@ -259,7 +256,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseDeletingStagePod {
-		r.Log.Info("Check pod deletion status ...")
+		logger.Info("Check pod deletion status ...")
 		for _, tgtNamespace := range namespaceMapping {
 			deleted := handler.IsStagePodDeleted(tgtNamespace)
 			if !deleted {
@@ -274,11 +271,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
-		r.Log.Info("Start invoking velero to restore original namespace ...")
+		logger.Info("Start invoking velero to restore original namespace ...")
 		suffix := "orig-" + handler.GetRestoreJobSuffix(veleroImport)
 		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
 		if err != nil {
-			r.Log.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
+			logger.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(veleroImport, nil, err)
 			return ctrl.Result{}, err
 		}
@@ -287,7 +284,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoringOriginNamespace {
-		r.Log.Info("Check original namespace restore status ...")
+		logger.Info("Check original namespace restore status ...")
 		restored := handler.IsNamespaceRestored(veleroImport.Status.VeleroRestoreRef.Name, config.VeleroNamespace)
 		if !restored {
 			return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
@@ -310,7 +307,7 @@ func (r *VeleroImportReconciler) Validate(veleroImport *dmapi.VeleroImport, hand
 		err := fmt.Errorf("invalid velero backup reference %s", veleroImport.Name)
 		return err
 	}
-	r.Log.Info("Precheck()", "backupRef.Name", backupRef.Name, "backupRef.Namespace", backupRef.Namespace)
+	logger.Info("Validate()", "backupRef.Name", backupRef.Name, "backupRef.Namespace", backupRef.Namespace)
 	backup, err := handler.GetBackupPlan(backupRef.Name, backupRef.Namespace)
 	if err != nil || backup.Status.Phase != velero.BackupPhaseCompleted || !*backup.Spec.SnapshotVolumes {
 		err = fmt.Errorf("invalid backup plan %s", backupRef.Name)
