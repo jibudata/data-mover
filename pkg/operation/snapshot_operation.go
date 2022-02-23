@@ -190,7 +190,7 @@ func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource
 	}
 	err = o.client.Update(context.TODO(), vsc)
 	if err != nil {
-		o.logger.Error(err, "Failed to patch volume snapshot content")
+		o.logger.Info("Failed to patch volume snapshot content", "error", err)
 		return err
 	}
 

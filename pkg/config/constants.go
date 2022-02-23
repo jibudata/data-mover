@@ -2,8 +2,8 @@ package config
 
 const (
 	TempNamespace            = "dm"
-	VeleroBackupNamePrefix   = "dm-backup-"
-	VeleroRestoreNamePrefix  = "dm-res-"
+	VeleroBackupNamePrefix   = "ve-"
+	VeleroRestoreNamePrefix  = "vi-"
 	StagePodImage            = "registry.cn-shanghai.aliyuncs.com/jibudata/velero-restic-restore-helper:v1.6.3"
 	VeleroNamespace          = "qiming-backend"
 	VeleroBackupLabel        = "velero.io/backup-name"

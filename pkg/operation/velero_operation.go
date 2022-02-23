@@ -299,14 +299,10 @@ func (o *Operation) GetVeleroBackupUID(client k8sclient.Client, jobUID types.UID
 
 func (o *Operation) GetRestoreJobSuffix(veleroImport *dmapi.VeleroImport) string {
 	var suffix string
-	if veleroImport == nil || veleroImport.Labels == nil {
+	if veleroImport == nil || !o.RefSet(veleroImport.Spec.DataImportRef) {
 		suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
 	} else {
-		if _, ok := veleroImport.Labels[DataImportLabel]; !ok {
-			suffix = strconv.FormatUint(uint64(time.Now().Unix()), 10)
-		} else {
-			suffix = veleroImport.Labels[DataImportLabel]
-		}
+		suffix = veleroImport.Spec.DataImportRef.Name
 	}
 	return suffix
 }
