@@ -172,9 +172,25 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// tempNampespace := config.TempNamespacePrefix + backupName
 	handler := operation.NewOperation(r.Log, r.Client)
 
-	if veleroImport.Status.Phase == dmapi.PhaseCompleted || veleroImport.Status.State == dmapi.StateVeleroFailed {
+	if veleroImport.Status.Phase == dmapi.PhaseCompleted ||
+		veleroImport.Status.State == dmapi.StateVeleroFailed ||
+		veleroImport.Status.State == dmapi.StateCanceled {
+
 		logger.Info("Restore " + veleroImport.Status.State)
 		return ctrl.Result{}, nil
+	}
+
+	if veleroImport.Status.State == dmapi.StateFailed {
+		now := time.Now()
+		if time.Duration(now.Sub(veleroImport.Status.StartTimestamp.Time)) >= timeout {
+			logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
+			veleroImport.Status.State = dmapi.StateCanceled
+			err = r.Client.Status().Update(context.TODO(), veleroImport)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
+		}
 	}
 
 	err = r.Validate(ctx, veleroImport, handler)
