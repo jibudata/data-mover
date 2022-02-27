@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -220,7 +221,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		fcNamespaceMapping := make(map[string]string)
 		for srcNamespace, tgtNamespace := range namespaceMapping {
-			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
+			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace+backupName[strings.LastIndex(backupName, "-"):]] = tgtNamespace
 		}
 
 		suffix := handler.GetRestoreJobSuffix(veleroImport)
