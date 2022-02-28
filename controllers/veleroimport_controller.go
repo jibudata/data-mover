@@ -181,26 +181,6 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	if veleroImport.Status.State == dmapi.StateFailed {
-		now := time.Now()
-		if time.Duration(now.Sub(veleroImport.Status.StartTimestamp.Time)) >= timeout {
-			logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
-			veleroImport.Status.State = dmapi.StateCanceled
-			err = r.Client.Status().Update(context.TODO(), veleroImport)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
-		}
-	}
-
-	err = r.Validate(ctx, veleroImport, handler)
-	if err != nil {
-		logger.Info("Validate failure", "velero import name", veleroImport.Name, "error", err)
-		r.UpdateStatus(ctx, veleroImport, nil, err)
-		return ctrl.Result{}, err
-	}
-
 	if veleroImport.Status.Phase == dmapi.PhaseInitial {
 		veleroImport.Status = dmapi.VeleroImportStatus{}
 		veleroImport.Status.StartTimestamp = &metav1.Time{Time: time.Now()}
@@ -209,6 +189,28 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err != nil {
 			return ctrl.Result{Requeue: true}, nil
 		}
+	}
+
+	if veleroImport.Status.State == dmapi.StateFailed {
+		now := time.Now()
+		if veleroImport.Status.StartTimestamp != nil {
+			if time.Duration(now.Sub(veleroImport.Status.StartTimestamp.Time)) >= timeout {
+				logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
+				veleroImport.Status.State = dmapi.StateCanceled
+				err = r.Client.Status().Update(context.TODO(), veleroImport)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
+			}
+		}
+	}
+
+	err = r.Validate(ctx, veleroImport, handler)
+	if err != nil {
+		logger.Info("Validate failure", "velero import name", veleroImport.Name, "error", err)
+		r.UpdateStatus(ctx, veleroImport, nil, err)
+		return ctrl.Result{}, err
 	}
 
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreTempNamespace {
