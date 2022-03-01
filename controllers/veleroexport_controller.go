@@ -134,7 +134,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroExport.Status.State == dmapi.StateFailed {
 		if veleroExport.Status.LastFailureTimestamp != nil {
-			if time.Since(veleroExport.Status.StartTimestamp.Time) >= timeout {
+			if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= timeout {
 				logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
 				// clean up tempary namespaces
 				for _, namespace := range includedNamespaces {
