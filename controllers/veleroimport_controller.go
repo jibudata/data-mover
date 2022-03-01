@@ -102,6 +102,7 @@ func (r *VeleroImportReconciler) UpdateStatus(ctx context.Context, veleroImport 
 		if veleroImport.Status.State != dmapi.StateVeleroFailed {
 			veleroImport.Status.State = dmapi.StateFailed
 		}
+		veleroImport.Status.LastFailureTimestamp = &metav1.Time{Time: time.Now()}
 		logger.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
 		veleroImport.Status.Message = ""
@@ -192,9 +193,8 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroImport.Status.State == dmapi.StateFailed {
-		now := time.Now()
-		if veleroImport.Status.StartTimestamp != nil {
-			if time.Duration(now.Sub(veleroImport.Status.StartTimestamp.Time)) >= timeout {
+		if veleroImport.Status.LastFailureTimestamp != nil {
+			if time.Since(veleroImport.Status.LastFailureTimestamp.Time) >= timeout {
 				logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
 				veleroImport.Status.State = dmapi.StateCanceled
 				err = r.Client.Status().Update(context.TODO(), veleroImport)
