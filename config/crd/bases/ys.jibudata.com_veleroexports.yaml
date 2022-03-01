@@ -99,6 +99,9 @@ spec:
               completionTimestamp:
                 format: date-time
                 type: string
+              lastFailureTimestamp:
+                format: date-time
+                type: string
               message:
                 type: string
               phase:

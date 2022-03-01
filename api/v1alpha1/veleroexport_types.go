@@ -56,13 +56,14 @@ type VeleroExportSpec struct {
 type VeleroExportStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase               string                  `json:"phase"`
-	State               string                  `json:"state"`
-	Message             string                  `json:"message"`
-	VeleroBackupRef     *corev1.ObjectReference `json:"veleroBackupRef,omitempty"`
-	StartTimestamp      *metav1.Time            `json:"startTimestamp,omitempty"`
-	CompletionTimestamp *metav1.Time            `json:"completionTimestamp,omitempty"`
-	StopTimestamp       *metav1.Time            `json:"stopTimestamp,omitempty"`
+	Phase                string                  `json:"phase"`
+	State                string                  `json:"state"`
+	Message              string                  `json:"message"`
+	VeleroBackupRef      *corev1.ObjectReference `json:"veleroBackupRef,omitempty"`
+	StartTimestamp       *metav1.Time            `json:"startTimestamp,omitempty"`
+	CompletionTimestamp  *metav1.Time            `json:"completionTimestamp,omitempty"`
+	StopTimestamp        *metav1.Time            `json:"stopTimestamp,omitempty"`
+	LastFailureTimestamp *metav1.Time            `json:"lastFailureTimestamp,omitempty"`
 }
 
 //+kubebuilder:object:root=true
