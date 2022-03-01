@@ -265,6 +265,9 @@ func (o *Operation) isPVCReady(namespace string, PersistentVolumeClaimName strin
 		Namespace: namespace,
 		Name:      PersistentVolumeClaimName,
 	}, pvc)
+	if err != nil {
+		return err
+	}
 	if pvc.Status.Phase != "Bound" {
 		time.Sleep(time.Duration(1) * time.Second)
 		err = o.isPVCReady(namespace, PersistentVolumeClaimName)
