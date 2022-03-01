@@ -133,23 +133,24 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	opt := ops.NewOperation(logger, r.Client)
 
 	if veleroExport.Status.State == dmapi.StateFailed {
-		now := time.Now()
-		if time.Duration(now.Sub(veleroExport.Status.StartTimestamp.Time)) >= timeout {
-			logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
-			// clean up tempary namespaces
-			for _, namespace := range includedNamespaces {
-				tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
-				err = opt.AsyncDeleteNamespace(tmpNamespace)
+		if veleroExport.Status.LastFailureTimestamp != nil {
+			if time.Since(veleroExport.Status.StartTimestamp.Time) >= timeout {
+				logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
+				// clean up tempary namespaces
+				for _, namespace := range includedNamespaces {
+					tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
+					err = opt.AsyncDeleteNamespace(tmpNamespace)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+				veleroExport.Status.State = dmapi.StateCanceled
+				err = r.Client.Status().Update(context.TODO(), veleroExport)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
+				return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 			}
-			veleroExport.Status.State = dmapi.StateCanceled
-			err = r.Client.Status().Update(context.TODO(), veleroExport)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 		}
 	}
 
@@ -641,6 +642,7 @@ func (r *VeleroExportReconciler) updateStatus(ctx context.Context, client k8scli
 		if veleroExport.Status.State != dmapi.StateVeleroFailed {
 			veleroExport.Status.State = dmapi.StateFailed
 		}
+		veleroExport.Status.LastFailureTimestamp = &metav1.Time{Time: time.Now()}
 		logger.Error(err, "snapshot export failure", "phase", veleroExport.Status.Phase)
 	} else {
 		veleroExport.Status.Message = ""
