@@ -1,5 +1,7 @@
 # Build the manager binary
-FROM golang:1.16 as builder
+FROM --platform=${TARGETPLATFORM} golang:1.17 as builder
+ARG TARGETARCH
+ARG TARGETOS
 
 ENV GOPROXY=https://goproxy.cn,direct
 
@@ -18,12 +20,9 @@ COPY controllers/ controllers/
 COPY pkg/ pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-# FROM gcr.io/distroless/static:nonroot
-FROM jibutech/ubi8-minimal:latest
+FROM --platform=${TARGETPLATFORM} registry.cn-shanghai.aliyuncs.com/jibudata/ubi8-minimal:8.5
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
