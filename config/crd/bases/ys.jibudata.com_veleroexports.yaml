@@ -54,6 +54,9 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              rateLimitValue:
+                description: Restic rate limit value, in KB/s
+                type: integer
               veleroBackupRef:
                 description: Velero backupjob name with volume snapshots
                 properties:
@@ -105,9 +108,6 @@ spec:
               message:
                 type: string
               phase:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to regenerate code after modifying
-                  this file'
                 type: string
               startTimestamp:
                 format: date-time

@@ -21,14 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // VeleroImportSpec defines the desired state of VeleroImport
 type VeleroImportSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Exported velero backupjob name with file system copy
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
@@ -45,12 +39,13 @@ type VeleroImportSpec struct {
 	PvcNames []string `json:"pvcNames,omitempty"`
 
 	SnapshotOnly bool `json:"snapshotOnly,omitempty"`
+
+	// Restic rate limit value, in KB/s
+	RateLimitValue int `json:"rateLimitValue,omitempty"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport
 type VeleroImportStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	Phase                string                  `json:"phase"`
 	State                string                  `json:"state"`
 	Message              string                  `json:"message,omitempty"`

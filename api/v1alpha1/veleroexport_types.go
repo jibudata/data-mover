@@ -27,9 +27,6 @@ const (
 	DefaultExportRetention = 30 * 24 * time.Hour
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 type ExportPolicy struct {
 	// Requency of the export, default is 1 export per snapshot
 	Retention time.Duration `json:"retention,omitempty"`
@@ -37,9 +34,6 @@ type ExportPolicy struct {
 
 // VeleroExportSpec defines the desired state of VeleroExport
 type VeleroExportSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Velero backupjob name with volume snapshots
 	VeleroBackupRef *corev1.ObjectReference `json:"veleroBackupRef"`
 
@@ -50,12 +44,13 @@ type VeleroExportSpec struct {
 	// +optional
 	DataSourceMapping map[string]string `json:"dataSourceMapping,omitempty"`
 	Policy            ExportPolicy      `json:"policy,omitempty"`
+
+	// Restic rate limit value, in KB/s
+	RateLimitValue int `json:"rateLimitValue,omitempty"`
 }
 
 // VeleroExportStatus defines the observed state of VeleroExport
 type VeleroExportStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	Phase                string                  `json:"phase"`
 	State                string                  `json:"state"`
 	Message              string                  `json:"message"`

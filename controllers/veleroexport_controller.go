@@ -91,15 +91,6 @@ func (r *VeleroExportReconciler) nextPhase(phase string) string {
 //+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=*,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=*,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the VeleroExport object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.api/v1alpha1/veleroexport_types.go
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -527,7 +518,11 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				backupNamespaces = append(backupNamespaces, tmpNamespace)
 			}
 
-			veleroPlan, err = opt.AsyncBackupNamespaceFc(backupName, veleroNamespace, backupNamespaces)
+			rateLimit := ""
+			if veleroExport.Spec.RateLimitValue > 0 {
+				rateLimit = fmt.Sprintf("%d", veleroExport.Spec.RateLimitValue)
+			}
+			veleroPlan, err = opt.EnsureVeleroBackup(backupName, veleroNamespace, rateLimit, backupNamespaces)
 			if err != nil {
 				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
