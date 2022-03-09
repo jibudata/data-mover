@@ -296,11 +296,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		logger.Info("Start invoking velero to restore original namespace ...")
 		suffix := "orig-" + handler.GetRestoreJobSuffix(veleroImport)
-		rateLimit := ""
-		if veleroImport.Spec.RateLimitValue > 0 {
-			rateLimit = fmt.Sprintf("%d", veleroImport.Spec.RateLimitValue)
-		}
-		restore, err := handler.EnsureVeleroRestore(backupName, config.VeleroNamespace, suffix, rateLimit, namespaceMapping, false)
+		restore, err := handler.EnsureVeleroRestore(backupName, config.VeleroNamespace, suffix, "", namespaceMapping, false)
 		if err != nil {
 			logger.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(ctx, veleroImport, nil, err)
