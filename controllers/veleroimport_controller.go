@@ -227,7 +227,11 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 
 		suffix := handler.GetRestoreJobSuffix(veleroImport)
-		restore, err := handler.AsyncRestoreNamespaces(backup.Name, config.VeleroNamespace, fcNamespaceMapping, false, suffix)
+		rateLimit := ""
+		if veleroImport.Spec.RateLimitValue > 0 {
+			rateLimit = fmt.Sprintf("%d", veleroImport.Spec.RateLimitValue)
+		}
+		restore, err := handler.EnsureVeleroRestore(backup.Name, config.VeleroNamespace, suffix, rateLimit, fcNamespaceMapping, false)
 		if err != nil {
 			r.UpdateStatus(ctx, veleroImport, nil, err)
 			return ctrl.Result{}, err
@@ -262,7 +266,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseDeleteStagePod {
 		logger.Info("Start delete pod in given namespace ...")
 		for _, tgtNamespace := range namespaceMapping {
-			err = handler.AsyncDeleteStagePod(tgtNamespace)
+			err = handler.EnsureStagePodDeleted(tgtNamespace)
 			if err != nil {
 				logger.Error(err, fmt.Sprintf("Failed to delete pod in given namespace %s: %s", tgtNamespace, err.Error()))
 				r.UpdateStatus(ctx, veleroImport, nil, err)
@@ -292,7 +296,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseRestoreOriginNamespace {
 		logger.Info("Start invoking velero to restore original namespace ...")
 		suffix := "orig-" + handler.GetRestoreJobSuffix(veleroImport)
-		restore, err := handler.AsyncRestoreNamespaces(backupName, config.VeleroNamespace, namespaceMapping, false, suffix)
+		restore, err := handler.EnsureVeleroRestore(backupName, config.VeleroNamespace, suffix, "", namespaceMapping, false)
 		if err != nil {
 			logger.Error(err, fmt.Sprint("Failed to restore original namespace", err.Error()))
 			r.UpdateStatus(ctx, veleroImport, nil, err)

@@ -279,7 +279,7 @@ func (o *Operation) IsStagePodDeleted(ns string) bool {
 }
 
 func (o *Operation) SyncDeleteStagePod(ns string) error {
-	o.AsyncDeleteStagePod(ns)
+	o.EnsureStagePodDeleted(ns)
 	var running = true
 	for running {
 		time.Sleep(time.Duration(5) * time.Second)
@@ -288,7 +288,7 @@ func (o *Operation) SyncDeleteStagePod(ns string) error {
 	return nil
 }
 
-func (o *Operation) AsyncDeleteStagePod(ns string) error {
+func (o *Operation) EnsureStagePodDeleted(ns string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
