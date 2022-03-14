@@ -12,23 +12,27 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (o *Operation) UpdatePV(PvName string, namespace string) error {
+func (o *Operation) UpdatePVClaimRef(PvName string, namespace string, pvcName string) error {
 	pv := &core.PersistentVolume{}
 	_ = o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: namespace,
 		Name:      PvName,
 	}, pv)
-	pv.Spec.ClaimRef = nil
+	pv.Spec.ClaimRef = &core.ObjectReference{
+		Name:      pvcName,
+		Namespace: namespace,
+		Kind:      "PersistentVolumeClaim",
+	}
 	err := o.client.Update(context.TODO(), pv)
 	if err != nil {
 		if errors.IsConflict(err) {
-			o.UpdatePV(PvName, namespace)
+			o.UpdatePVClaimRef(PvName, namespace, pvcName)
 		} else {
-			o.logger.Info(fmt.Sprintf("Failed to update pv %s to remove reference in namespace %s", PvName, namespace))
+			o.logger.Error(err, "Failed to update pv claimRef", "pv", PvName, "pvc reference", pvcName, "namespace", namespace)
 			return err
 		}
 	}
-	o.logger.Info(fmt.Sprintf("Update pv %s to remove reference in namespace %s", PvName, namespace))
+	o.logger.Info("successfuly update pv claimRef", "pv", PvName, "pvc reference", pvcName, "namespace", namespace)
 	return nil
 }
 
@@ -194,8 +198,8 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace strin
 	}
 	o.logger.Info(fmt.Sprintf("Deleted pvc %s", pvc.Name))
 
-	// update pv to remove reference
-	err = o.UpdatePV(pvName, namespace)
+	// update pv with new claimRef
+	err = o.UpdatePVClaimRef(pvName, namespace, vsr.PersistentVolumeClaimName)
 	if err != nil {
 		return err
 	}
