@@ -172,6 +172,12 @@ func (o *Operation) EnsureVeleroRestore(backupName, namespace, dataImport, rateL
 		excludedResources = append(excludedResources, "persistentvolumeclaims")
 		excludedResources = append(excludedResources, "persistentvolumes")
 	}
+
+	var includedNamespaces []string
+	for key := range nsMapping {
+		includedNamespaces = append(includedNamespaces, key)
+	}
+
 	var annotations map[string]string
 	if len(rateLimit) > 0 {
 		annotations = make(map[string]string)
@@ -184,10 +190,11 @@ func (o *Operation) EnsureVeleroRestore(backupName, namespace, dataImport, rateL
 			Annotations: annotations,
 		},
 		Spec: velero.RestoreSpec{
-			BackupName:        backupName,
-			RestorePVs:        &(config.True),
-			ExcludedResources: excludedResources,
-			NamespaceMapping:  nsMapping,
+			BackupName:         backupName,
+			RestorePVs:         &(config.True),
+			ExcludedResources:  excludedResources,
+			NamespaceMapping:   nsMapping,
+			IncludedNamespaces: includedNamespaces,
 		},
 	}
 	err := o.client.Create(context.TODO(), restore)
