@@ -8,6 +8,7 @@ import (
 
 	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
 	config "github.com/jibudata/data-mover/pkg/config"
+	"github.com/jibudata/data-mover/pkg/storageclass"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,9 @@ const (
 	DataImportLabel = "data-import-name"
 
 	ResticRateLimitAnnotation = "velero.io/rate-limit-kb"
+
+	StorageClassPvcMappings = "jibudata.com/pvc-storageclass-plugin"
+	StorageClassPvMappings  = "jibudata.com/pv-storageclass-plugin"
 )
 
 func (o *Operation) GetVeleroBackup(backupName string, namespace string) (*velero.Backup, error) {
@@ -183,13 +187,20 @@ func (o *Operation) EnsureVeleroRestore(veleroImport *dmapi.VeleroImport, backup
 		annotations = make(map[string]string)
 		annotations[ResticRateLimitAnnotation] = rateLimit
 	}
-	if veleroImport.Annotations != nil {
+
+	// check storageclass mapping
+	storageClassActions := veleroImport.Spec.Actions.StorageClassMappings
+	if storageClassActions != nil {
 		if annotations == nil {
 			annotations = make(map[string]string)
 		}
-		for k, v := range veleroImport.Annotations {
-			annotations[k] = v
+
+		value, err := storageclass.CreateAnnotationFromMap(storageClassActions)
+		if err != nil {
+			return nil, err
 		}
+		annotations[StorageClassPvMappings] = value
+		annotations[StorageClassPvcMappings] = value
 	}
 
 	restore := &velero.Restore{

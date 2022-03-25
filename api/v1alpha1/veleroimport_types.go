@@ -21,6 +21,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RestoreActions defines the action for a restore
+type RestoreActions struct {
+	StorageClassMappings map[string]string `json:"storageClassMappings,omitempty"`
+}
+
 // VeleroImportSpec defines the desired state of VeleroImport
 type VeleroImportSpec struct {
 	// Exported velero backupjob name with file system copy
@@ -42,6 +47,9 @@ type VeleroImportSpec struct {
 
 	// Restic rate limit value, in KB/s
 	RateLimitValue int `json:"rateLimitValue,omitempty"`
+
+	// Restore actions
+	Actions RestoreActions `json:"actions,omitempty"`
 }
 
 // VeleroImportStatus defines the observed state of VeleroImport
