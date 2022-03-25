@@ -36,6 +36,14 @@ spec:
           spec:
             description: VeleroImportSpec defines the desired state of VeleroImport
             properties:
+              actions:
+                description: Restore actions
+                properties:
+                  storageClassMappings:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               dataImportRef:
                 description: Data Import Reference
                 properties:
