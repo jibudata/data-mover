@@ -14,4 +14,4 @@ namespace: qiming-backend
 images:
 - name: controller
   newName: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover
-  newTag: latest
+  newTag: v0.1.3
