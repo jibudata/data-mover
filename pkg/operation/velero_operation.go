@@ -8,6 +8,7 @@ import (
 
 	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
 	config "github.com/jibudata/data-mover/pkg/config"
+	"github.com/jibudata/data-mover/pkg/storageclass"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,9 @@ const (
 	DataImportLabel = "data-import-name"
 
 	ResticRateLimitAnnotation = "velero.io/rate-limit-kb"
+
+	StorageClassPvcMappings = "jibudata.com/pvc-storageclass-plugin"
+	StorageClassPvMappings  = "jibudata.com/pv-storageclass-plugin"
 )
 
 func (o *Operation) GetVeleroBackup(backupName string, namespace string) (*velero.Backup, error) {
@@ -158,7 +162,7 @@ func (o *Operation) GetCompletedBackup(backupName string, namespace string) {
 	// TBD: add timeout
 }
 
-func (o *Operation) EnsureVeleroRestore(backupName, namespace, dataImport, rateLimit string, nsMapping map[string]string, excludePV bool) (*velero.Restore, error) {
+func (o *Operation) EnsureVeleroRestore(veleroImport *dmapi.VeleroImport, backupName, namespace, dataImport, rateLimit string, nsMapping map[string]string, excludePV bool) (*velero.Restore, error) {
 
 	excludedResources := []string{
 		"nodes",
@@ -183,6 +187,22 @@ func (o *Operation) EnsureVeleroRestore(backupName, namespace, dataImport, rateL
 		annotations = make(map[string]string)
 		annotations[ResticRateLimitAnnotation] = rateLimit
 	}
+
+	// check storageclass mapping
+	storageClassActions := veleroImport.Spec.Actions.StorageClassMappings
+	if storageClassActions != nil {
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+
+		value, err := storageclass.CreateAnnotationFromMap(storageClassActions)
+		if err != nil {
+			return nil, err
+		}
+		annotations[StorageClassPvMappings] = value
+		annotations[StorageClassPvcMappings] = value
+	}
+
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        config.VeleroRestoreNamePrefix + dataImport,
@@ -209,8 +229,8 @@ func (o *Operation) EnsureVeleroRestore(backupName, namespace, dataImport, rateL
 	return restore, nil
 }
 
-func (o *Operation) SyncRestoreNamespaces(backupName string, namespace string, nsMapping map[string]string, excludePV bool, dataImport string) (string, error) {
-	restore, err := o.EnsureVeleroRestore(backupName, namespace, dataImport, "", nsMapping, excludePV)
+func (o *Operation) SyncRestoreNamespaces(veleroImport *dmapi.VeleroImport, backupName string, namespace string, nsMapping map[string]string, excludePV bool, dataImport string) (string, error) {
+	restore, err := o.EnsureVeleroRestore(veleroImport, backupName, namespace, dataImport, "", nsMapping, excludePV)
 	if err != nil {
 		return "", err
 	}
