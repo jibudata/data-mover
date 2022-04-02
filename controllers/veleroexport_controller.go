@@ -68,7 +68,7 @@ var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseCreatePVClaim},
 	{Phase: dmapi.PhaseRecreatePVClaim},
 	{Phase: dmapi.PhaseUpdateSnapshotContentBack},
-	{Phase: dmapi.PhaseCheckSnapshotContentBack},
+	// {Phase: dmapi.PhaseCheckSnapshotContentBack},
 	{Phase: dmapi.PhaseDeleteVolumeSnapshot},
 	{Phase: dmapi.PhaseCreateStagePod},
 	{Phase: dmapi.PhaseWaitStagePodRunning},

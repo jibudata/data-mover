@@ -145,8 +145,13 @@ func (o *Operation) IsVolumeSnapshotContentReady(vsrl []*VolumeSnapshotResource,
 		if err != nil {
 			return false, err
 		}
+
+		if vs.Status.ReadyToUse == nil {
+			return false, fmt.Errorf("vsc ReadyToUse nil")
+		}
+
 		if !*vs.Status.ReadyToUse {
-			return false, err
+			return false, nil
 		}
 	}
 	return true, nil
@@ -183,15 +188,14 @@ func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource
 		return err
 	}
 
-	if recover {
-		vsc.Spec.Source.SnapshotHandle = nil
-	} else {
+	if !recover {
 		vsc.Spec.Source.SnapshotHandle = vsc.Status.SnapshotHandle
-	}
-	err = o.client.Update(context.TODO(), vsc)
-	if err != nil {
-		o.logger.Info("Failed to patch volume snapshot content", "error", err)
-		return err
+		vsc.Spec.Source.VolumeHandle = nil
+		err = o.client.Update(context.TODO(), vsc)
+		if err != nil {
+			o.logger.Info("Failed to patch volume snapshot content", "error", err)
+			return err
+		}
 	}
 
 	return nil
