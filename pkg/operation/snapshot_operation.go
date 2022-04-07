@@ -144,11 +144,14 @@ func (o *Operation) IsVolumeSnapshotReady(vsrl []*VolumeSnapshotResource, namesp
 			Name:      vsr.VolumeSnapshotName,
 		}, vs)
 		if err != nil {
+			o.logger.Error(err, "get volumesnapshot err")
 			return false, err
 		}
 
-		if vs.Status.ReadyToUse == nil {
-			return false, fmt.Errorf("vsc ReadyToUse nil")
+		if vs.Status == nil || vs.Status.ReadyToUse == nil {
+			err = fmt.Errorf("vs status or ReadyToUse nil")
+			o.logger.Error(err, "status not ready")
+			return false, err
 		}
 
 		if !*vs.Status.ReadyToUse {
