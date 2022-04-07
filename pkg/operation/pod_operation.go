@@ -160,13 +160,13 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 
 }
 
+
 func (o *Operation) EnsureStagePodCleaned(ns string) (bool, error) {
 	podList, err := o.getPodList(ns)
 	if err != nil {
 		return false, err
 	}
 	for _, pod := range podList {
-
 		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
 			return false, nil
 		}

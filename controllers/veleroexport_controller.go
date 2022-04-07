@@ -292,8 +292,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		err = r.Update(ctx, veleroExport)
 		if err != nil {
-			r.updateStatus(ctx, r.Client, veleroExport, err)
-			return ctrl.Result{Requeue: true}, nil
+      r.updateStatus(ctx, r.Client, veleroExport, err)
+			return ctrl.Result{Requeue: true}, err
 		}
 
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -384,6 +384,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{}, err
 			}
 		}
+
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
@@ -440,7 +441,6 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseCleanPvcPod {
-
 		logger.Info("[phase]: PhaseCleanPvcPod")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
@@ -473,6 +473,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
 		return ctrl.Result{Requeue: true}, nil
 	}
+
 
 	if veleroExport.Status.Phase == dmapi.PhaseUpdatePvClaimRetain {
 
