@@ -122,8 +122,9 @@ func (o *Operation) GetStagePodStatus(tempNs string) bool {
 
 	for _, pod := range podList {
 		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
-		if pod.Status.Phase != "Running" {
+		if pod.Status.Phase != core.PodRunning {
 			running = false
+			break
 		}
 	}
 	return running
@@ -159,14 +160,18 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 
 }
 
-func (o *Operation) EnsurePodCleaned(ns string) (bool, error) {
+func (o *Operation) EnsureStagePodCleaned(ns string) (bool, error) {
 	podList, err := o.getPodList(ns)
 	if err != nil {
 		return false, err
 	}
-	if len(podList) > 0 {
-		return false, nil
+	for _, pod := range podList {
+
+		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
+			return false, nil
+		}
 	}
+
 	return true, nil
 }
 
