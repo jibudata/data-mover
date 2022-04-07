@@ -35,7 +35,7 @@ const (
 	PhaseCheckPvcReady              = "CheckPvcReady"
 	PhaseCleanPvcPod                = "CleanPvcPod"
 	PhaseEnsurePvcPodCleaned        = "EnsurePvcPodCleaned"
-	PhaseUdpatePvClaimRetain        = "UdpatePvClaimRetain"
+	PhaseUpdatePvClaimRetain        = "UpdatePvClaimRetain"
 	PhaseDeletePvc                  = "DeletePvc"
 	PhaseEnsurePvcDeleted           = "EnsurePvcDeleted"
 	PhaseRecreatePvc                = "RecreatePvc"

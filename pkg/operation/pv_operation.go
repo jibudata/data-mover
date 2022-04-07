@@ -30,17 +30,20 @@ func (o *Operation) UpdatePvClaimRef(vsrl []*VolumeSnapshotResource, namespace s
 
 func (o *Operation) updatePvClaimRef(PvName string, namespace string, pvc *core.PersistentVolumeClaim) error {
 	pv := &core.PersistentVolume{}
-	_ = o.client.Get(context.TODO(), k8sclient.ObjectKey{
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: namespace,
 		Name:      PvName,
 	}, pv)
+	if err != nil {
+		return err
+	}
 	pv.Spec.ClaimRef = &core.ObjectReference{
 		Name:      pvc.Name,
 		Namespace: namespace,
 		Kind:      "PersistentVolumeClaim",
 		UID:       pvc.UID,
 	}
-	err := o.client.Update(context.TODO(), pv)
+	err = o.client.Update(context.TODO(), pv)
 	if err != nil {
 		o.logger.Error(err, "Failed to update pv claimRef", "pv", PvName, "pvc reference", pvc.Name, "namespace", namespace)
 		return err
@@ -111,9 +114,18 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 		},
 	}
 
+
+	storageReq, exists := newPvc.Spec.Resources.Requests[core.ResourceStorage]
+
+	// It is possible that the volume provider allocated a larger capacity volume than what was requested in the backed up PVC.
+	// In this scenario the volumesnapshot of the PVC will endup being larger than its requested storage size.
+	// Such a PVC, on restore as-is, will be stuck attempting to use a Volumesnapshot as a data source for a PVC that
+	// is not large enough.
+	// To counter that, here we set the storage request on the PVC to the larger of the PVC's storage request and the size of the
+	// VolumeSnapshot
 	if vs.Status != nil &&
 		vs.Status.RestoreSize != nil &&
-		vs.Status.RestoreSize.Cmp(newPvc.Spec.Resources.Requests[core.ResourceStorage]) > 0 {
+		(!exists || vs.Status.RestoreSize.Cmp(storageReq) > 0) {
 		newPvc.Spec.Resources.Requests[core.ResourceStorage] = *vs.Status.RestoreSize
 	}
 
@@ -206,6 +218,7 @@ func (o *Operation) updatePvClaimPolicy(vsrl []*VolumeSnapshotResource, namespac
 	return nil
 }
 
+
 func (o *Operation) DeletePvc(vsrl []*VolumeSnapshotResource, namespace string) error {
 
 	for _, vsr := range vsrl {
@@ -260,8 +273,19 @@ func (o *Operation) getPvcList(namespace string) ([]core.PersistentVolumeClaim, 
 // Create pod with pvc
 func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace, tgtNamespace string) error {
 	var err error
-	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
+	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, tgtNamespace)
+	if err == nil && pvc.Spec.VolumeName == vsr.PersistentVolumeName {
+		return nil
+	}
+
+	pvc, err = o.getPvc(vsr.PersistentVolumeClaimName, namespace)
 	if err != nil {
+		return err
+	}
+
+	vs, err := o.GetVolumeSnapshot(vsr.VolumeSnapshotName, tgtNamespace)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("failed to get vs in namespace %s", tgtNamespace))
 		return err
 	}
 
@@ -273,15 +297,26 @@ func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace, tgtN
 		},
 		Spec: core.PersistentVolumeClaimSpec{
 			StorageClassName: pvc.Spec.StorageClassName,
-			AccessModes: []core.PersistentVolumeAccessMode{
-				"ReadWriteOnce",
-			},
-			Resources: core.ResourceRequirements{
-				Requests: pvc.Spec.Resources.Requests,
-			},
-			VolumeName: vsr.PersistentVolumeName,
+			AccessModes:      pvc.Spec.AccessModes,
+			Resources:        pvc.Spec.Resources,
+			VolumeName:       vsr.PersistentVolumeName,
+			Selector:         pvc.Spec.Selector,
 		},
 	}
+	storageReq, exists := newPvc.Spec.Resources.Requests[core.ResourceStorage]
+
+	// It is possible that the volume provider allocated a larger capacity volume than what was requested in the backed up PVC.
+	// In this scenario the volumesnapshot of the PVC will endup being larger than its requested storage size.
+	// Such a PVC, on restore as-is, will be stuck attempting to use a Volumesnapshot as a data source for a PVC that
+	// is not large enough.
+	// To counter that, here we set the storage request on the PVC to the larger of the PVC's storage request and the size of the
+	// VolumeSnapshot
+	if vs.Status != nil &&
+		vs.Status.RestoreSize != nil &&
+		(!exists || vs.Status.RestoreSize.Cmp(storageReq) > 0) {
+		newPvc.Spec.Resources.Requests[core.ResourceStorage] = *vs.Status.RestoreSize
+	}
+
 	err = o.createPvc(newPvc)
 	if err != nil {
 		o.logger.Error(err, "Failed to create PVC", "name", newPvc.Name)
@@ -351,7 +386,9 @@ func (o *Operation) CheckPVCReady(namespace string, vsrl []*VolumeSnapshotResour
 		if err != nil {
 			return false, err
 		}
-		if pvc.Status.Phase != "Bound" {
+
+		if pvc.Status.Phase != core.ClaimBound {
+			o.logger.Info("pvc is not Bound", "pvc", pvc.Name)
 			return false, nil
 		}
 		vsr.PersistentVolumeName = pvc.Spec.VolumeName
