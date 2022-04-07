@@ -114,7 +114,6 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 		},
 	}
 
-
 	storageReq, exists := newPvc.Spec.Resources.Requests[core.ResourceStorage]
 
 	// It is possible that the volume provider allocated a larger capacity volume than what was requested in the backed up PVC.
@@ -218,7 +217,6 @@ func (o *Operation) updatePvClaimPolicy(vsrl []*VolumeSnapshotResource, namespac
 	return nil
 }
 
-
 func (o *Operation) DeletePvc(vsrl []*VolumeSnapshotResource, namespace string) error {
 
 	for _, vsr := range vsrl {
@@ -244,16 +242,16 @@ func (o *Operation) deletePvc(pvcName string, namespace string) error {
 	return nil
 }
 
-func (o *Operation) EnsurePvcDeleted(namespace string) error {
+func (o *Operation) EnsurePvcDeleted(namespace string) (bool, error) {
 
 	pvcList, err := o.getPvcList(namespace)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(pvcList) > 0 {
-		return fmt.Errorf("pvc still exists")
+		return false, nil
 	}
-	return nil
+	return true, nil
 }
 
 func (o *Operation) getPvcList(namespace string) ([]core.PersistentVolumeClaim, error) {
