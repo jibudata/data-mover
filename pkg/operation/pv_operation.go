@@ -6,6 +6,7 @@ import (
 	"time"
 
 	core "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,7 +82,13 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 		Name:      vsr.PersistentVolumeClaimName,
 	}, pvc)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", backupNs))
+		o.logger.Error(err, fmt.Sprintf("failed to get pvc in namespace %s", backupNs))
+		return err
+	}
+
+	vs, err := o.GetVolumeSnapshot(vsr.VolumeSnapshotName, tgtNs)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("failed to get vs in namespace %s", backupNs))
 		return err
 	}
 
@@ -98,14 +105,18 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 				Kind:     "VolumeSnapshot",
 				APIGroup: &apiGroup,
 			},
-			AccessModes: []core.PersistentVolumeAccessMode{
-				"ReadWriteOnce",
-			},
-			Resources: core.ResourceRequirements{
-				Requests: pvc.Spec.Resources.Requests,
-			},
+			AccessModes: pvc.Spec.AccessModes,
+			Resources:   pvc.Spec.Resources,
+			Selector:    pvc.Spec.Selector,
 		},
 	}
+
+	if vs.Status != nil &&
+		vs.Status.RestoreSize != nil &&
+		vs.Status.RestoreSize.Cmp(newPvc.Spec.Resources.Requests[core.ResourceStorage]) > 0 {
+		newPvc.Spec.Resources.Requests[core.ResourceStorage] = *vs.Status.RestoreSize
+	}
+
 	err = o.client.Create(context.TODO(), newPvc)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to create pvc in namespace %s", tgtNs))

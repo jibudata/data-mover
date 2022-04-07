@@ -155,7 +155,7 @@ func (o *Operation) IsVolumeSnapshotReady(vsrl []*VolumeSnapshotResource, namesp
 		}
 
 		if !*vs.Status.ReadyToUse {
-			return false, nil
+			return false, fmt.Errorf("volumesnapshot is not ready to use")
 		}
 	}
 	return true, nil
@@ -232,6 +232,19 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID,
 		}
 	}
 	return nil
+}
+
+func (o *Operation) GetVolumeSnapshot(vsName string, ns string) (*snapshotv1beta1api.VolumeSnapshot, error) {
+
+	volumeSnapshot := &snapshotv1beta1api.VolumeSnapshot{}
+	var err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
+		Namespace: ns,
+		Name:      vsName,
+	}, volumeSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	return volumeSnapshot, nil
 }
 
 func (o *Operation) GetVolumeSnapshotList(backupName string, ns string) (*snapshotv1beta1api.VolumeSnapshotList, error) {

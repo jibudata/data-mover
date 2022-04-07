@@ -41,7 +41,7 @@ const (
 	PhaseRecreatePvc                = "RecreatePvc"
 	PhaseUpdatePvClaimRef           = "UpdatePvClaimRef"
 	PhaseEnsureRecreatePvcReady     = "sEnsureRecreatePvcReady"
-	PhaseUdpatePvClaimDelete        = "UdpatePvClaimDelete"
+	PhaseUpdatePvClaimDelete        = "UpdatePvClaimDelete"
 	PhaseCreateStagePod             = "CreateStagePod"
 	PhaseWaitStagePodRunning        = "WaitStagePodRunning"
 	PhaseStartFileSystemCopy        = "StartFileSystemCopy"

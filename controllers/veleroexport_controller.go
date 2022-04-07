@@ -77,7 +77,7 @@ var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseRecreatePvc},
 	{Phase: dmapi.PhaseUpdatePvClaimRef},
 	{Phase: dmapi.PhaseEnsureRecreatePvcReady},
-	{Phase: dmapi.PhaseUdpatePvClaimDelete},
+	{Phase: dmapi.PhaseUpdatePvClaimDelete},
 	{Phase: dmapi.PhaseUpdateSnapshotContentBack},
 	// {Phase: dmapi.PhaseCheckSnapshotContentBack},
 	{Phase: dmapi.PhaseDeleteVolumeSnapshot},
@@ -603,7 +603,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	}
 
-	if veleroExport.Status.Phase == dmapi.PhaseUdpatePvClaimDelete {
+	if veleroExport.Status.Phase == dmapi.PhaseUpdatePvClaimDelete {
 
 		logger.Info("[phase]: PhaseUdpatePvClaimDelete")
 		for _, namespace := range includedNamespaces {
@@ -721,12 +721,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
 			state := opt.GetStagePodState(tmpNamespace)
-			if state == corev1.PodFailed {
-				err = r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pod state failure"))
+			if state != corev1.PodRunning {
+				err = r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pod state is not running"))
 				return ctrl.Result{}, err
-			}
-			if state == corev1.PodPending {
-				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			}
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
