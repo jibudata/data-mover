@@ -49,7 +49,7 @@ type VeleroExportReconciler struct {
 const (
 	requeueAfterFast = 5 * time.Second
 	requeueAfterSlow = 20 * time.Second
-	timeout          = 2 * time.Minute
+	timeout          = 30 * time.Minute
 )
 
 const (
@@ -292,7 +292,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		err = r.Update(ctx, veleroExport)
 		if err != nil {
-      r.updateStatus(ctx, r.Client, veleroExport, err)
+			r.updateStatus(ctx, r.Client, veleroExport, err)
 			return ctrl.Result{Requeue: true}, err
 		}
 
@@ -473,7 +473,6 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
 		return ctrl.Result{Requeue: true}, nil
 	}
-
 
 	if veleroExport.Status.Phase == dmapi.PhaseUpdatePvClaimRetain {
 
