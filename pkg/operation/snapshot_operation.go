@@ -27,6 +27,7 @@ type VolumeSnapshotResource struct {
 	// object.
 	VolumeSnapshotContentName string
 	NewVolumeSnapshotUID      types.UID
+	PersistentVolumeName      string
 }
 
 // 1: get related VolumeSnapshotResource with backup and namespace
@@ -134,7 +135,7 @@ func (o *Operation) MonitorUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResour
 	}
 }
 
-func (o *Operation) IsVolumeSnapshotContentReady(vsrl []*VolumeSnapshotResource, namespace string) (bool, error) {
+func (o *Operation) IsVolumeSnapshotReady(vsrl []*VolumeSnapshotResource, namespace string) (bool, error) {
 
 	for _, vsr := range vsrl {
 		vs := &snapshotv1beta1api.VolumeSnapshot{}
@@ -158,16 +159,6 @@ func (o *Operation) IsVolumeSnapshotContentReady(vsrl []*VolumeSnapshotResource,
 }
 
 func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource, namespace string, recover bool) error {
-	// get volumesnapshot
-	// vs := &snapshotv1beta1api.VolumeSnapshot{}
-	// err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
-	// 	Namespace: namespace,
-	// 	Name:      vsr.VolumeSnapshotName,
-	// }, vs)
-	// if err != nil {
-	// 	o.logger.Error(err, fmt.Sprintf("Failed to get volume snapshot %s", vsr.VolumeSnapshotName))
-	// 	return err
-	// }
 	var err error
 	if recover {
 		err = o.updateVscSnapRef(vsr, vsr.OrigVolumeSnapshotUID, namespace)
@@ -220,10 +211,7 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID,
 		o.logger.Error(err, "Failed to get volume snapshot content")
 		return err
 	}
-	if vsc.Spec.VolumeSnapshotRef.Namespace == namespace && *vsc.Status.ReadyToUse {
-		// already updated
-		return nil
-	}
+
 	vsc.Spec.VolumeSnapshotRef = core.ObjectReference{}
 	vsc.Spec.VolumeSnapshotRef.Name = vsr.VolumeSnapshotName
 	vsc.Spec.VolumeSnapshotRef.Namespace = namespace
@@ -232,6 +220,7 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID,
 	vsc.Spec.VolumeSnapshotRef.Kind = "VolumeSnapshot"
 	err = o.client.Update(context.TODO(), vsc)
 	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("Failed to update volumesnapshotcontent %s to remove snapshot reference", vsr.VolumeSnapshotContentName))
 		if errors.IsConflict(err) {
 			o.updateVscSnapRef(vsr, uid, namespace)
 		} else {
@@ -309,6 +298,7 @@ func (o *Operation) GetVolumeSnapshotResourceList(vsrl string) []*VolumeSnapshot
 			PersistentVolumeClaimName: volumeSnapshotResource[2],
 			VolumeSnapshotContentName: volumeSnapshotResource[3],
 			NewVolumeSnapshotUID:      types.UID(volumeSnapshotResource[4]),
+			PersistentVolumeName:      volumeSnapshotResource[5],
 		}
 		i = i + 1
 		// o.logger.Info("vsr", "VolumeSnapshotName", volumeSnapshotResourceList[i].VolumeSnapshotName, "VolumeSnapshotUID", volumeSnapshotResourceList[i].VolumeSnapshotUID, "PersistentVolumeClaimName", volumeSnapshotResourceList[i].PersistentVolumeClaimName, "VolumeSnapshotContentName", volumeSnapshotResourceList[i].VolumeSnapshotContentName)

@@ -159,12 +159,23 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 
 }
 
+func (o *Operation) EnsurePodCleaned(ns string) (bool, error) {
+	podList, err := o.getPodList(ns)
+	if err != nil {
+		return false, err
+	}
+	if len(podList) > 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // BuildStagePods - creates a list of stage pods from a list of pods
 func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StagePodList {
 
 	existingPods, _ := o.getPodList(ns)
 	var existingPodMap = make(map[string]bool)
-	if existingPods != nil && len(existingPods) > 0 {
+	if len(existingPods) > 0 {
 		for _, pod := range existingPods {
 			name := pod.Name[len(stagePodNamePrefix):]
 			existingPodMap[name] = true
@@ -303,7 +314,7 @@ func (o *Operation) EnsureStagePodDeleted(ns string) error {
 		if strings.HasPrefix(name, stagePodNamePrefix) {
 			err = o.client.Delete(context.TODO(), &pod)
 			if err != nil {
-				o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
+				o.logger.Error(err, fmt.Sprintf("Failed to delete pod %s", name))
 				return err
 			}
 			o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
