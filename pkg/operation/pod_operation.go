@@ -113,11 +113,11 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	return nil
 }
 
-func (o *Operation) GetStagePodStatus(tempNs string) bool {
+func (o *Operation) GetStagePodStatus(tempNs string) (bool, error) {
 	var running = true
 	podList, err := o.getPodList(tempNs)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	for _, pod := range podList {
@@ -127,7 +127,7 @@ func (o *Operation) GetStagePodStatus(tempNs string) bool {
 			break
 		}
 	}
-	return running
+	return running, nil
 }
 
 func (o *Operation) GetStagePodState(tempNs string) core.PodPhase {
@@ -159,7 +159,6 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 	return podList.Items, err
 
 }
-
 
 func (o *Operation) EnsureStagePodCleaned(ns string) (bool, error) {
 	podList, err := o.getPodList(ns)

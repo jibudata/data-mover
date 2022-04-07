@@ -293,7 +293,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		err = r.Update(ctx, veleroExport)
 		if err != nil {
 			r.updateStatus(ctx, r.Client, veleroExport, err)
-			return ctrl.Result{Requeue: true}, err
+			return ctrl.Result{}, err
 		}
 
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -397,15 +397,20 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseWaitPvcPodRunning")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
-			running := opt.GetStagePodStatus(tmpNamespace)
-			if !running {
-				err = r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pod state is not running"))
+			running, err := opt.GetStagePodStatus(tmpNamespace)
+			if err != nil {
+				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
+			}
+			if !running {
+				err = fmt.Errorf("pod state is not running")
+				r.updateStatus(ctx, r.Client, veleroExport, err)
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
 		if err != nil {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, err
 		}
 
 	}
@@ -467,7 +472,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if !clean {
 				err = fmt.Errorf("stage pod still running")
 				r.updateStatus(ctx, r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterSlow}, err
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -526,10 +531,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				if vsrl == nil {
 					continue
 				}
-				err = opt.EnsurePvcDeleted(tmpNamespace)
+				deleted, err := opt.EnsurePvcDeleted(tmpNamespace)
 				if err != nil {
 					r.updateStatus(ctx, r.Client, veleroExport, err)
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+				}
+				if !deleted {
+					r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pvc still exists"))
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 				}
 			}
 		}
@@ -665,7 +674,8 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					return ctrl.Result{}, err
 				}
 				if !ready {
-					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
+					r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("snapshot not ready"))
+					return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 				}
 			}
 		}
@@ -694,7 +704,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
 		if err != nil {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 		}
 	}
 
@@ -709,10 +719,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{}, err
 			}
 		}
-		err = r.updateStatus(ctx, r.Client, veleroExport, err)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
-		}
+		r.updateStatus(ctx, r.Client, veleroExport, nil)
 		return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 	}
 
@@ -721,10 +728,15 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseWaitStagePodRunning")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
-			running := opt.GetStagePodStatus(tmpNamespace)
-			if !running {
-				err = r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("stage pod state is not running"))
+			running, err := opt.GetStagePodStatus(tmpNamespace)
+			if err != nil {
+				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
+			}
+			if !running {
+				err = fmt.Errorf("pod state is not running")
+				r.updateStatus(ctx, r.Client, veleroExport, err)
+				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
