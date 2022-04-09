@@ -40,7 +40,7 @@ const (
 	PhaseEnsurePvcDeleted           = "EnsurePvcDeleted"
 	PhaseRecreatePvc                = "RecreatePvc"
 	PhaseUpdatePvClaimRef           = "UpdatePvClaimRef"
-	PhaseEnsureRecreatePvcReady     = "sEnsureRecreatePvcReady"
+	PhaseEnsureRecreatePvcReady     = "EnsureRecreatePvcReady"
 	PhaseUpdatePvClaimDelete        = "UpdatePvClaimDelete"
 	PhaseCreateStagePod             = "CreateStagePod"
 	PhaseWaitStagePodRunning        = "WaitStagePodRunning"

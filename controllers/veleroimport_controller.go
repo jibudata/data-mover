@@ -102,9 +102,14 @@ func (r *VeleroImportReconciler) UpdateStatus(ctx context.Context, veleroImport 
 		if veleroImport.Status.State != dmapi.StateVeleroFailed {
 			veleroImport.Status.State = dmapi.StateFailed
 		}
-		veleroImport.Status.LastFailureTimestamp = &metav1.Time{Time: time.Now()}
+		if veleroImport.Status.LastFailureTimestamp == nil {
+			veleroImport.Status.LastFailureTimestamp = &metav1.Time{Time: time.Now()}
+		}
 		logger.Error(err, "snapshot import failure", "phase", veleroImport.Status.Phase)
 	} else {
+		if veleroImport.Status.LastFailureTimestamp != nil {
+			veleroImport.Status.LastFailureTimestamp = nil
+		}
 		veleroImport.Status.Message = ""
 		veleroImport.Status.Phase = r.nextPhase(veleroImport.Status.Phase)
 		if veleroImport.Status.Phase == dmapi.GetLastPhase(steps) {
@@ -283,6 +288,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for _, tgtNamespace := range namespaceMapping {
 			deleted := handler.IsStagePodDeleted(tgtNamespace)
 			if !deleted {
+				r.UpdateStatus(ctx, veleroImport, nil, fmt.Errorf("stage pod still exists"))
 				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			} else {
 				err = r.UpdateStatus(ctx, veleroImport, nil, nil)

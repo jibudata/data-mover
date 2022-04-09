@@ -139,12 +139,19 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= timeout {
 				logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
 				// clean up tempary namespaces
+				tmpNamespaces := []string{}
 				for _, namespace := range includedNamespaces {
 					tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
+					tmpNamespaces = append(tmpNamespaces, tmpNamespace)
 					err = opt.AsyncDeleteNamespace(tmpNamespace)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
+				}
+				// clean up pvs
+				err = opt.ClearPVs(tmpNamespaces)
+				if err != nil {
+					return ctrl.Result{}, err
 				}
 				veleroExport.Status.State = dmapi.StateCanceled
 				err = r.Client.Status().Update(context.TODO(), veleroExport)
