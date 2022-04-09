@@ -226,8 +226,8 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 			},
 			Spec: core.PodSpec{
 				Containers: []core.Container{},
-				NodeName:   pod.Spec.NodeName,
-				Volumes:    pvcVolumes,
+				// NodeName:   pod.Spec.NodeName,
+				Volumes: pvcVolumes,
 			},
 		},
 	}

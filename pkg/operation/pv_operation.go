@@ -394,3 +394,28 @@ func (o *Operation) CheckPVCReady(namespace string, vsrl []*VolumeSnapshotResour
 
 	return true, nil
 }
+
+func (o *Operation) ClearPVs(namespaces []string) error {
+
+	var err error
+	pvList := &core.PersistentVolumeList{}
+	options := &k8sclient.ListOptions{}
+	err = o.client.List(context.TODO(), pvList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to get pv list")
+		return err
+	}
+	for _, pv := range pvList.Items {
+		for _, namespace := range namespaces {
+			if pv.Spec.ClaimRef.Namespace == namespace {
+				err = o.client.Delete(context.TODO(), &pv)
+				if err != nil {
+					o.logger.Error(err, "failed to delete pv", "name", pv.Name)
+					return err
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
