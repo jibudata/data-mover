@@ -5,6 +5,7 @@ const (
 	VeleroBackupNamePrefix   = "ve-"
 	VeleroRestoreNamePrefix  = "vi-"
 	StagePodImage            = "registry.cn-shanghai.aliyuncs.com/jibudata/velero-restic-restore-helper:v1.6.3"
+	StagePodVersion          = "velero-restic-restore-helper:v1.7.0"
 	VeleroNamespace          = "qiming-backend"
 	VeleroBackupLabel        = "velero.io/backup-name"
 	VeleroStorageLabel       = "velero.io/storage-location"
@@ -14,6 +15,7 @@ const (
 	SnapshotExportBackupName = "snapshot-export-velero-backup-name"
 	// DataExportName           = "data-export-name"
 	TempNamespacePrefix = "dm-"
+	PodNamePrefix       = "data-mover"
 )
 
 var (

@@ -79,14 +79,50 @@ func (l *StagePodList) merge(list ...StagePod) {
 	}
 }
 
+func (o *Operation) getStagePodImage() string {
+
+	var image string = config.StagePodImage
+	podList := &core.PodList{}
+	options := &k8sclient.ListOptions{
+		Namespace: config.VeleroNamespace,
+	}
+	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to list deployment", "namespace", config.VeleroNamespace)
+		return image
+	}
+
+	for _, pod := range podList.Items {
+		if strings.Contains(pod.Name, config.PodNamePrefix) {
+			if len(pod.Spec.Containers) > 0 {
+				image = pod.Spec.Containers[0].Image
+			}
+			break
+		}
+	}
+	if image != config.StagePodImage {
+		o.logger.Info("get data mover pod image", "image", image)
+		return image[:strings.LastIndex(image, "/")+1] + config.StagePodVersion
+	}
+	return image
+}
+
 // backup poc namespace using velero
 func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
 	}
-	_ = o.client.List(context.TODO(), podList, options)
-	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, tempNs)
+	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to list pods", "namespace", backupNamespace)
+		return err
+	}
+
+	stagePodImage := o.getStagePodImage()
+	o.logger.Info("get stage pod image", "image", stagePodImage)
+
+	stagePods := o.BuildStagePods(&podList.Items, stagePodImage, tempNs)
 	for _, stagePod := range stagePods {
 		err := o.client.Create(context.TODO(), &stagePod.Pod)
 		if err != nil {
