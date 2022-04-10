@@ -94,11 +94,14 @@ func (o *Operation) getStagePodImage() string {
 
 	for _, pod := range podList.Items {
 		if strings.Contains(pod.Name, config.PodNamePrefix) {
-			image = pod.Spec.Containers[0].Image
+			if len(pod.Spec.Containers) > 0 {
+				image = pod.Spec.Containers[0].Image
+			}
 			break
 		}
 	}
 	if image != config.StagePodImage {
+		o.logger.Info("get data mover pod image", "image", image)
 		return image[:strings.LastIndex(image, "/")+1] + config.StagePodVersion
 	}
 	return image
