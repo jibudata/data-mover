@@ -99,6 +99,7 @@ func (o *Operation) getStagePodImage() string {
 		}
 	}
 	if image != config.StagePodImage {
+                o.logger.Info("get data mover pod image", "image", image)
 		return image[:strings.LastIndex(image, "/")+1] + config.StagePodVersion
 	}
 	return image
