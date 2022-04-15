@@ -49,7 +49,8 @@ type VeleroExportReconciler struct {
 const (
 	requeueAfterFast = 5 * time.Second
 	requeueAfterSlow = 20 * time.Second
-	timeout          = 15 * time.Minute
+	FailureTimeout   = 15 * time.Minute
+	QueuedTimeout    = 30 * time.Minute
 )
 
 const (
@@ -135,21 +136,30 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroExport.Status.State == dmapi.StateFailed {
 		if veleroExport.Status.LastFailureTimestamp != nil {
-			if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= timeout {
+			if veleroExport.Status.Phase == dmapi.PhaseCreated {
+				if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= QueuedTimeout {
 
-				logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
-				err = r.cleanUp(opt, includedNamespaces, true)
-				if err != nil {
-					return ctrl.Result{}, err
+					logger.Info("veleroexport in queue  got timeout", "veleroexport", veleroExport.Name)
+					veleroExport.Status.State = dmapi.StateCanceled
 				}
+			} else {
+				if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= FailureTimeout {
 
-				veleroExport.Status.State = dmapi.StateCanceled
-				err = r.Client.Status().Update(context.TODO(), veleroExport)
-				if err != nil {
-					return ctrl.Result{}, err
+					logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
+					err = r.cleanUp(opt, includedNamespaces, true)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					veleroExport.Status.State = dmapi.StateCanceled
 				}
-				return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 			}
+		}
+		if veleroExport.Status.State == dmapi.StateCanceled {
+			err = r.Client.Status().Update(context.TODO(), veleroExport)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 		}
 	}
 
@@ -182,12 +192,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseCreated {
-		onging, err := opt.CheckOngoingExport(veleroExport)
+		onging, jobName, err := opt.CheckOngoingExport(veleroExport)
 		if err != nil {
+			err = r.updateStatus(ctx, r.Client, veleroExport, err)
 			return ctrl.Result{}, err
 		}
 		if onging {
-			logger.Info("There are ongoing velero exports in cluster")
+			err = fmt.Errorf("there is ongoing velero export %s working on the same resource", jobName)
+			r.updateStatus(ctx, r.Client, veleroExport, err)
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 		logger.Info(

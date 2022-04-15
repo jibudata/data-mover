@@ -197,7 +197,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.State == dmapi.StateFailed {
 		if veleroImport.Status.LastFailureTimestamp != nil {
-			if time.Since(veleroImport.Status.LastFailureTimestamp.Time) >= timeout {
+			if time.Since(veleroImport.Status.LastFailureTimestamp.Time) >= FailureTimeout {
 				logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
 				veleroImport.Status.State = dmapi.StateCanceled
 				err = r.Client.Status().Update(context.TODO(), veleroImport)
