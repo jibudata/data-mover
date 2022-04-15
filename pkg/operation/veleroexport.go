@@ -17,7 +17,7 @@ func (o *Operation) CheckOngoingExport(export *dmapi.VeleroExport) (bool, string
 	}
 	ns := getNamespaces(export.Spec.DataSourceMapping)
 	for _, exportJob := range veleroexports {
-		if exportJob.Status.State == dmapi.StateInProgress || exportJob.Status.State == dmapi.StateFailed {
+		if exportJob.Status.Phase != dmapi.PhaseCreated && (exportJob.Status.State == dmapi.StateInProgress || exportJob.Status.State == dmapi.StateFailed) {
 			// if exportJob.Status.State != "" && !util.Contains(CompletedStates, exportJob.Status.State) {
 			namespaceMap := getNamespaces(exportJob.Spec.DataSourceMapping)
 			for key := range namespaceMap {

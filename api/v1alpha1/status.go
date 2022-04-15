@@ -10,8 +10,7 @@ import (
 // Step
 type Step struct {
 	// A phase name.
-	Phase     string
-	SkipClean bool
+	Phase string
 }
 
 // Phases
@@ -94,17 +93,6 @@ func GetNextPhase(phase string, allSteps []Step) string {
 		current += 1
 		return allSteps[current].Phase
 	}
-}
-
-func NeedResourceClean(phase string, allSteps []Step) bool {
-
-	for _, step := range allSteps {
-
-		if step.Phase == phase {
-			return !step.SkipClean
-		}
-	}
-	return false
 }
 
 func GetLastPhase(allSteps []Step) string {

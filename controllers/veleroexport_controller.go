@@ -58,9 +58,9 @@ const (
 )
 
 var veleroExportSteps = []dmapi.Step{
-	{Phase: dmapi.PhaseCreated, SkipClean: true},
-	{Phase: dmapi.PhasePrecheck, SkipClean: true},
-	{Phase: dmapi.PhasePrepare, SkipClean: true},
+	{Phase: dmapi.PhaseCreated},
+	{Phase: dmapi.PhasePrecheck},
+	{Phase: dmapi.PhasePrepare},
 	{Phase: dmapi.PhaseWaitPrepareComplete},
 	{Phase: dmapi.PhaseCreateTempNamespace},
 	{Phase: dmapi.PhaseCreateVolumeSnapshot},
