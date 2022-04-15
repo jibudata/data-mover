@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -176,7 +175,6 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroNamespace := veleroImport.Spec.VeleroBackupRef.Namespace
 	// restoreNamespace := veleroImport.Spec.RestoreNamespace
 	namespaceMapping := veleroImport.Spec.NamespaceMapping
-	// tempNampespace := config.TempNamespacePrefix + backupName
 	handler := operation.NewOperation(r.Log, r.Client)
 
 	if veleroImport.Status.Phase == dmapi.PhaseCompleted ||
@@ -199,7 +197,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if veleroImport.Status.State == dmapi.StateFailed {
 		if veleroImport.Status.LastFailureTimestamp != nil {
-			if time.Since(veleroImport.Status.LastFailureTimestamp.Time) >= timeout {
+			if time.Since(veleroImport.Status.LastFailureTimestamp.Time) >= FailureTimeout {
 				logger.Info("Failed veleroImport got timeout", "veleroImport", veleroImport.Name)
 				veleroImport.Status.State = dmapi.StateCanceled
 				err = r.Client.Status().Update(context.TODO(), veleroImport)
@@ -228,7 +226,7 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		fcNamespaceMapping := make(map[string]string)
 		for srcNamespace, tgtNamespace := range namespaceMapping {
-			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace+backupName[strings.LastIndex(backupName, "-"):]] = tgtNamespace
+			fcNamespaceMapping[config.TempNamespacePrefix+srcNamespace] = tgtNamespace
 		}
 
 		suffix := handler.GetRestoreJobSuffix(veleroImport)
