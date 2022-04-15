@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -59,7 +60,7 @@ var veleroExportSteps = []dmapi.Step{
 	{Phase: dmapi.PhaseCreated, SkipClean: true},
 	{Phase: dmapi.PhasePrecheck, SkipClean: true},
 	{Phase: dmapi.PhasePrepare, SkipClean: true},
-	// {Phase: dmapi.PhaseWaitPrepareComplete},
+	{Phase: dmapi.PhaseWaitPrepareComplete},
 	{Phase: dmapi.PhaseCreateTempNamespace},
 	{Phase: dmapi.PhaseCreateVolumeSnapshot},
 	{Phase: dmapi.PhaseUpdateSnapshotContent},
@@ -137,12 +138,9 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= timeout {
 
 				logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
-				if dmapi.NeedResourceClean(veleroExport.Status.Phase, veleroExportSteps) {
-					logger.Info("need to clean up resources")
-					err = r.cleanUp(opt, includedNamespaces, true)
-					if err != nil {
-						return ctrl.Result{}, err
-					}
+				err = r.cleanUp(opt, includedNamespaces, true)
+				if err != nil {
+					return ctrl.Result{}, err
 				}
 
 				veleroExport.Status.State = dmapi.StateCanceled
@@ -184,6 +182,14 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if veleroExport.Status.Phase == dmapi.PhaseCreated {
+		onging, err := opt.CheckOngoingExport(veleroExport)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if onging {
+			logger.Info("There are ongoing velero exports in cluster")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
 		logger.Info(
 			"snapshot export started",
 			"retention",
@@ -209,14 +215,12 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroExport.Status.Phase == dmapi.PhasePrepare {
 		logger.Info("[phase]: PhasePrepare")
 		for _, namespace := range includedNamespaces {
-			tmpNamespace := config.TempNamespacePrefix + namespace
-			_, err = opt.GetNamespace(tmpNamespace)
-			if err == nil {
-				err = fmt.Errorf(tmpNamespace + " namespace exists, other export might be on going")
-				r.updateStatus(ctx, r.Client, veleroExport, err)
-				return ctrl.Result{}, err
-			}
-			if err != nil && !errors.IsNotFound(err) {
+			tmpNamespace := config.TempNamespacePrefix + namespace + backupName[strings.LastIndex(backupName, "-"):]
+			err = opt.AsyncDeleteNamespace(tmpNamespace)
+			if err != nil && errors.IsConflict(err) {
+				// do nothing
+				return ctrl.Result{Requeue: true}, nil
+			} else if err != nil {
 				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
 			}
@@ -231,7 +235,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseWaitPrepareComplete")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			_, err = opt.GetNamespace(tmpNamespace)
+			_, err := opt.GetNamespace(tmpNamespace)
 			if err != nil && errors.IsNotFound(err) {
 				continue
 			} else if err != nil {
