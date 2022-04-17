@@ -112,7 +112,7 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	veleroExport := &dmapi.VeleroExport{}
 	err = r.Get(ctx, req.NamespacedName, veleroExport)
 	if err != nil {
-		logger.Info("Failed to get veleroExport CR", "error", err)
+		logger.Info("failed to get veleroExport CR", "error", err)
 		return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 	}
 
@@ -145,9 +145,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			} else {
 				if time.Since(veleroExport.Status.LastFailureTimestamp.Time) >= FailureTimeout {
 
-					logger.Info("Failed veleroexport got timeout", "veleroexport", veleroExport.Name)
+					logger.Info("failed veleroexport got timeout", "veleroexport", veleroExport.Name)
 					err = r.cleanUp(opt, includedNamespaces, true)
 					if err != nil {
+						err = fmt.Errorf("failure got timeout, clean up err: " + err.Error())
 						return ctrl.Result{}, err
 					}
 					veleroExport.Status.State = dmapi.StateCanceled
@@ -416,15 +417,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseWaitPvcPodRunning")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			running, err := opt.GetStagePodStatus(tmpNamespace)
+			_, err := opt.GetStagePodRunningStatus(tmpNamespace)
 			if err != nil {
 				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
-			}
-			if !running {
-				err = fmt.Errorf("pod state is not running")
-				r.updateStatus(ctx, r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -443,15 +439,12 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				if vsrl == nil {
 					continue
 				}
-				ready, err := opt.CheckPVCReady(tmpNamespace, vsrl)
+				_, err := opt.CheckPvcReady(tmpNamespace, vsrl)
 				if err != nil {
 					r.updateStatus(ctx, r.Client, veleroExport, err)
 					return ctrl.Result{}, err
 				}
-				if !ready {
-					r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pvc not ready, namespace %s, will retry", tmpNamespace))
-					return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
-				}
+
 				r.UpdateVsrlAnnotations(vsrl, namespace, veleroExport)
 			}
 		}
@@ -483,15 +476,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseEnsurePvcPodCleaned")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			clean, err := opt.EnsureStagePodCleaned(tmpNamespace)
+			_, err := opt.EnsureStagePodCleaned(tmpNamespace)
 			if err != nil {
 				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
-			}
-			if !clean {
-				err = fmt.Errorf("stage pod still running")
-				r.updateStatus(ctx, r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -550,14 +538,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				if vsrl == nil {
 					continue
 				}
-				deleted, err := opt.EnsurePvcDeleted(tmpNamespace)
+				_, err := opt.EnsurePvcDeleted(tmpNamespace)
 				if err != nil {
 					r.updateStatus(ctx, r.Client, veleroExport, err)
 					return ctrl.Result{RequeueAfter: requeueAfterFast}, err
-				}
-				if !deleted {
-					r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pvc still exists"))
-					return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 				}
 			}
 		}
@@ -616,14 +600,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				if vsrl == nil {
 					continue
 				}
-				ready, err := opt.CheckPVCReady(tmpNamespace, vsrl)
+				_, err := opt.CheckPvcReady(tmpNamespace, vsrl)
 				if err != nil {
 					r.updateStatus(ctx, r.Client, veleroExport, err)
 					return ctrl.Result{}, err
-				}
-				if !ready {
-					r.updateStatus(ctx, r.Client, veleroExport, fmt.Errorf("pvc not ready, namespace %s, will retry", tmpNamespace))
-					return ctrl.Result{RequeueAfter: requeueAfterFast}, nil
 				}
 			}
 		}
@@ -747,15 +727,10 @@ func (r *VeleroExportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("[phase]: PhaseWaitStagePodRunning")
 		for _, namespace := range includedNamespaces {
 			tmpNamespace := config.TempNamespacePrefix + namespace
-			running, err := opt.GetStagePodStatus(tmpNamespace)
+			_, err := opt.GetStagePodRunningStatus(tmpNamespace)
 			if err != nil {
 				r.updateStatus(ctx, r.Client, veleroExport, err)
 				return ctrl.Result{}, err
-			}
-			if !running {
-				err = fmt.Errorf("pod state is not running")
-				r.updateStatus(ctx, r.Client, veleroExport, err)
-				return ctrl.Result{RequeueAfter: requeueAfterSlow}, nil
 			}
 		}
 		err = r.updateStatus(ctx, r.Client, veleroExport, nil)
@@ -1004,7 +979,8 @@ func (r *VeleroExportReconciler) deleteVeleroExport(export *dmapi.VeleroExport) 
 
 	// Delete velero export
 	err := r.Client.Delete(context.TODO(), export)
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
+		r.Log.Error(err, "failed to delete veleroexport")
 		return err
 	}
 

@@ -9,6 +9,7 @@ import (
 	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
 	config "github.com/jibudata/data-mover/pkg/config"
 	"github.com/jibudata/data-mover/pkg/storageclass"
+	"github.com/jibudata/data-mover/pkg/util"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,11 +37,10 @@ func (o *Operation) GetVeleroBackup(backupName string, namespace string) (*veler
 		LabelSelector: k8slabels.SelectorFromSet(labels),
 	}
 	err := o.client.List(context.TODO(), backups, options)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			o.logger.Error(err, fmt.Sprintf("Failed to list velero backup plan %s", backupName))
-		}
-		return nil, err
+	if err != nil && !errors.IsNotFound(err) {
+		msg := fmt.Sprintf("failed to list velero backup plan %s", backupName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	if len(backups.Items) > 0 {
 		return &backups.Items[0], nil
@@ -58,8 +58,9 @@ func (o *Operation) GetBackupPlan(backupName string, namespace string) (*velero.
 	}
 	err := o.client.Get(context.TODO(), keys, backup)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
-		return nil, err
+		msg := fmt.Sprintf("failed to get velero backup plan %s", backupName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	return backup, nil
 }
@@ -83,8 +84,9 @@ func (o *Operation) EnsureVeleroBackup(backupName, namespace, rateLimit string, 
 		Name:      backupName,
 	}, bp)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
-		return nil, err
+		msg := fmt.Sprintf("failed to get velero backup plan %s", backupName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	o.logger.Info(fmt.Sprintf("Get velero backup plan %s", backupName))
 	labels := map[string]string{
@@ -99,10 +101,11 @@ func (o *Operation) EnsureVeleroBackup(backupName, namespace, rateLimit string, 
 	if len(rateLimit) > 0 {
 		annotations[ResticRateLimitAnnotation] = rateLimit
 	}
+	newBpName := config.VeleroBackupNamePrefix + backupName
 	var newBp *velero.Backup = &velero.Backup{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
-			Name:        config.VeleroBackupNamePrefix + backupName,
+			Name:        newBpName,
 			Namespace:   bp.Namespace,
 			Annotations: annotations,
 		},
@@ -120,13 +123,14 @@ func (o *Operation) EnsureVeleroBackup(backupName, namespace, rateLimit string, 
 	}
 	err = o.client.Create(context.TODO(), newBp)
 	if err != nil && errors.IsAlreadyExists(err) {
-		o.logger.Info("velero plan already exists", "plan name", newBp.Name)
+		o.logger.Info("velero plan already exists", "plan name", newBpName)
 		return newBp, nil
 	} else if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create velero backup plan %s", newBp.Name))
-		return nil, err
+		msg := fmt.Sprintf("failed to create velero backup plan %s", newBpName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
-	o.logger.Info(fmt.Sprintf("Created velero backup plan %s", newBp.Name))
+	o.logger.Info(fmt.Sprintf("Created velero backup plan %s", newBpName))
 	return newBp, nil
 }
 
@@ -138,8 +142,9 @@ func (o *Operation) GetBackupStatus(backupName string, namespace string) (velero
 		Name:      backupName,
 	}, bp)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get velero backup plan %s", backupName))
-		return "", err
+		msg := fmt.Sprintf("failed to get velero backup plan %s", backupName)
+		o.logger.Error(err, msg)
+		return "", util.WrapError(msg, err)
 	}
 	return bp.Status.Phase, nil
 }
@@ -203,9 +208,10 @@ func (o *Operation) EnsureVeleroRestore(veleroImport *dmapi.VeleroImport, backup
 		annotations[StorageClassPvcMappings] = value
 	}
 
+	restoreName := config.VeleroRestoreNamePrefix + dataImport
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        config.VeleroRestoreNamePrefix + dataImport,
+			Name:        restoreName,
 			Namespace:   namespace,
 			Annotations: annotations,
 		},
@@ -222,10 +228,11 @@ func (o *Operation) EnsureVeleroRestore(veleroImport *dmapi.VeleroImport, backup
 	if err != nil && errors.IsAlreadyExists(err) {
 		return restore, nil
 	} else if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
-		return nil, err
+		msg := fmt.Sprintf("failed to create velero restore plan %s", restoreName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
-	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restore.Name))
+	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restoreName))
 	return restore, nil
 }
 
@@ -255,9 +262,10 @@ func (o *Operation) CreateVeleroRestore(backupName string, namespace string, src
 		excludedResources = append(excludedResources, "persistentvolumes")
 	}
 	suffix := o.GetRestoreJobSuffix(nil)
+	restoreName := config.VeleroRestoreNamePrefix + suffix
 	restore := &velero.Restore{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.VeleroRestoreNamePrefix + suffix,
+			Name:      restoreName,
 			Namespace: namespace,
 		},
 		Spec: velero.RestoreSpec{
@@ -271,10 +279,11 @@ func (o *Operation) CreateVeleroRestore(backupName string, namespace string, src
 	if err != nil && errors.IsAlreadyExists(err) {
 		return restore, nil
 	} else if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create velero restore plan %s", restore.Name))
-		return nil, err
+		msg := fmt.Sprintf("failed to create velero restore plan %s", restoreName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
-	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restore.Name))
+	o.logger.Info(fmt.Sprintf("Created velero restore plan %s", restoreName))
 	return restore, nil
 }
 
@@ -323,8 +332,9 @@ func (o *Operation) GetVeleroBackupUID(client k8sclient.Client, jobUID types.UID
 		&list,
 		k8sclient.MatchingLabels(labels))
 	if err != nil {
-		o.logger.Info("error", "err", err)
-		return nil, err
+		msg := fmt.Sprintf("failed to list velero backup plan with uid %s", jobUID)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	o.logger.Info("GetVeleroBackup", "list", list)
 	if len(list.Items) > 0 {

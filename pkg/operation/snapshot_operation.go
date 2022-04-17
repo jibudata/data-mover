@@ -7,6 +7,7 @@ import (
 	"time"
 
 	config "github.com/jibudata/data-mover/pkg/config"
+	"github.com/jibudata/data-mover/pkg/util"
 	snapshotv1beta1api "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +37,7 @@ type VolumeSnapshotResource struct {
 func (o *Operation) CreateVolumeSnapshots(backupName string, backupNs string, tgtNs string) ([]*VolumeSnapshotResource, error) {
 	volumeSnapshotList, err := o.GetVolumeSnapshotList(backupName, backupNs)
 	if err != nil {
-		o.logger.Error(err, "Failed to get volume snapshot list")
+		o.logger.Error(err, "failed to get volume snapshot list")
 		return nil, err
 	}
 	var vsrl = make([]*VolumeSnapshotResource, len(volumeSnapshotList.Items))
@@ -47,7 +48,6 @@ func (o *Operation) CreateVolumeSnapshots(backupName string, backupNs string, tg
 	for _, vs := range volumeSnapshotList.Items {
 		vsr, err := o.CreateVolumeSnapshot(vs, labels, tgtNs)
 		if err != nil {
-			o.logger.Error(err, "Failed to create volume snapshot list", "for vs", vs.Name)
 			return nil, err
 		}
 		vsrl[i] = vsr
@@ -58,10 +58,13 @@ func (o *Operation) CreateVolumeSnapshots(backupName string, backupNs string, tg
 
 func (o *Operation) DeleteVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot) error {
 	// delete volumesnap shot
+	name := vs.Name
+	namespace := vs.Namespace
 	err := o.client.Delete(context.TODO(), &vs)
-	if err != nil {
-		o.logger.Error(err, "Failed to delete volume snapshot")
-		return err
+	if err != nil && !errors.IsNotFound(err) {
+		msg := fmt.Sprintf("failed to delete volume snapshot %s in namespace %s", name, namespace)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 	return nil
 }
@@ -89,8 +92,9 @@ func (o *Operation) CreateVolumeSnapshot(vs snapshotv1beta1api.VolumeSnapshot, l
 	o.logger.Info(fmt.Sprintf("Created volumesnapshot: %s in %s", volumeSnapshotName, namespace))
 	err := o.client.Create(context.TODO(), newVs)
 	if err != nil {
-		o.logger.Info(fmt.Sprintf("Failed to create volume snapshot in %s", namespace))
-		return nil, err
+		msg := fmt.Sprintf("failed to create volume snapshot %s in  %s", volumeSnapshotName, namespace)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	// construct VolumeSnapshotResource
 	vsr := &VolumeSnapshotResource{VolumeSnapshotName: volumeSnapshotName,
@@ -144,18 +148,19 @@ func (o *Operation) IsVolumeSnapshotReady(vsrl []*VolumeSnapshotResource, namesp
 			Name:      vsr.VolumeSnapshotName,
 		}, vs)
 		if err != nil {
-			o.logger.Error(err, "get volumesnapshot err")
-			return false, err
+			msg := fmt.Sprintf("get volumesnapshot %s in namespace %s", vsr.VolumeSnapshotName, namespace)
+			o.logger.Error(err, msg)
+			return false, util.WrapError(msg, err)
 		}
 
 		if vs.Status == nil || vs.Status.ReadyToUse == nil {
-			err = fmt.Errorf("vs status or ReadyToUse nil")
+			err = fmt.Errorf("vs %s status or ReadyToUse nil", vsr.VolumeSnapshotName)
 			o.logger.Error(err, "status not ready")
 			return false, err
 		}
 
 		if !*vs.Status.ReadyToUse {
-			return false, fmt.Errorf("volumesnapshot is not ready to use")
+			return false, fmt.Errorf("volumesnapshot %s is not ready to use", vsr.VolumeSnapshotName)
 		}
 	}
 	return true, nil
@@ -169,7 +174,6 @@ func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource
 		err = o.updateVscSnapRef(vsr, vsr.NewVolumeSnapshotUID, namespace)
 	}
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to update volume snapshot content ref for %s", vsr.VolumeSnapshotName))
 		return err
 	}
 
@@ -178,8 +182,9 @@ func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource
 		Name: vsr.VolumeSnapshotContentName,
 	}, vsc)
 	if err != nil {
-		o.logger.Error(err, "Failed to get volume snapshot content")
-		return err
+		msg := fmt.Sprintf("failed to get volume snapshot content %s", vsr.VolumeSnapshotContentName)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 
 	if !recover {
@@ -187,8 +192,9 @@ func (o *Operation) AsyncUpdateVolumeSnapshotContent(vsr *VolumeSnapshotResource
 		vsc.Spec.Source.VolumeHandle = nil
 		err = o.client.Update(context.TODO(), vsc)
 		if err != nil {
-			o.logger.Info("Failed to patch volume snapshot content", "error", err)
-			return err
+			msg := fmt.Sprintf("failed to update volume snapshot content %s", vsr.VolumeSnapshotContentName)
+			o.logger.Error(err, msg)
+			return util.WrapError(msg, err)
 		}
 	}
 
@@ -211,8 +217,10 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID,
 		Name: vsr.VolumeSnapshotContentName,
 	}, vsc)
 	if err != nil {
-		o.logger.Error(err, "Failed to get volume snapshot content")
-		return err
+		o.logger.Error(err, "failed to get volume snapshot content")
+		msg := fmt.Sprintf("failed to get volumesnapshotcontent %s ", vsr.VolumeSnapshotContentName)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 
 	vsc.Spec.VolumeSnapshotRef = core.ObjectReference{}
@@ -223,12 +231,13 @@ func (o *Operation) updateVscSnapRef(vsr *VolumeSnapshotResource, uid types.UID,
 	vsc.Spec.VolumeSnapshotRef.Kind = "VolumeSnapshot"
 	err = o.client.Update(context.TODO(), vsc)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to update volumesnapshotcontent %s to remove snapshot reference", vsr.VolumeSnapshotContentName))
+		errMsg := fmt.Sprintf("failed to update volumesnapshotcontent %s to remove snapshot reference", vsr.VolumeSnapshotContentName)
+		o.logger.Error(err, errMsg)
 		if errors.IsConflict(err) {
 			o.updateVscSnapRef(vsr, uid, namespace)
 		} else {
-			o.logger.Error(err, fmt.Sprintf("Failed to update volumesnapshotcontent %s to remove snapshot reference", vsr.VolumeSnapshotContentName))
-			return err
+			o.logger.Error(err, errMsg)
+			return util.WrapError(errMsg, err)
 		}
 	}
 	return nil
@@ -242,28 +251,28 @@ func (o *Operation) GetVolumeSnapshot(vsName string, ns string) (*snapshotv1beta
 		Name:      vsName,
 	}, volumeSnapshot)
 	if err != nil {
-		return nil, err
+		msg := fmt.Sprintf("failed to get volumesnapshot %s in namespace %s", vsName, ns)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	return volumeSnapshot, nil
 }
 
 func (o *Operation) GetVolumeSnapshotList(backupName string, ns string) (*snapshotv1beta1api.VolumeSnapshotList, error) {
 	volumeSnapshotList := &snapshotv1beta1api.VolumeSnapshotList{}
-	options := &k8sclient.ListOptions{}
+	options := &k8sclient.ListOptions{Namespace: ns}
 	if backupName != "" {
 		labels := map[string]string{
 			config.VeleroBackupLabel: backupName,
 		}
-		options = &k8sclient.ListOptions{
-			Namespace:     ns,
-			LabelSelector: k8slabels.SelectorFromSet(labels),
-		}
-	} else {
-		options = &k8sclient.ListOptions{
-			Namespace: ns,
-		}
+		options.LabelSelector = k8slabels.SelectorFromSet(labels)
 	}
 	var err = o.client.List(context.TODO(), volumeSnapshotList, options)
+	if err != nil {
+		msg := fmt.Sprintf("failed to list volumesnapshot for velero backup %s", backupName)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
+	}
 	return volumeSnapshotList, err
 }
 
@@ -331,8 +340,10 @@ func (o *Operation) DeleteVolumeSnapshots(vsrl []*VolumeSnapshotResource, namesp
 			},
 		}
 		err := o.client.Delete(context.TODO(), volumeSnapshot)
-		if err != nil {
-			return err
+		if err != nil && !errors.IsNotFound(err) {
+			msg := fmt.Sprintf("failed to delete volumesnapshot %s in namespace %s", vsr.VolumeSnapshotName, namespace)
+			o.logger.Error(err, msg)
+			return util.WrapError(msg, err)
 		}
 	}
 	return nil
