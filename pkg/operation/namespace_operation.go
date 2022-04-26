@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jibudata/data-mover/pkg/util"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,14 +28,16 @@ func (o *Operation) CreateNamespace(ns string, forceRecreate bool) error {
 			}
 			err = o.client.Create(context.TODO(), &namespace)
 			if err != nil {
-				o.logger.Error(err, fmt.Sprintf("Failed to create namespace %s", ns))
-				return err
+				msg := fmt.Sprintf("failed to create namespace %s", ns)
+				o.logger.Error(err, msg)
+				return util.WrapError(msg, err)
 			}
 			return nil
 
 		} else {
-			o.logger.Error(err, fmt.Sprintf("Failed to get namespace %s", ns))
-			return err
+			msg := fmt.Sprintf("Failed to get namespace %s", ns)
+			o.logger.Error(err, msg)
+			return util.WrapError(msg, err)
 		}
 	}
 	if !forceRecreate {
@@ -54,8 +57,9 @@ func (o *Operation) CreateNamespace(ns string, forceRecreate bool) error {
 	}
 	err = o.client.Create(context.TODO(), &namespace)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to create namespace %s", ns))
-		return err
+		msg := fmt.Sprintf("failed to create namespace %s", ns)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 	return nil
 }
@@ -74,9 +78,16 @@ func (o *Operation) AsyncDeleteNamespace(ns string) error {
 				return nil
 			}
 		}
-		return err
+		msg := fmt.Sprintf("failed to get namespace %s", ns)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 	err = o.client.Delete(context.TODO(), namespace)
+	if err != nil && !errors.IsNotFound(err) {
+		msg := fmt.Sprintf("failed to delete namespace %s", ns)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
+	}
 	return err
 }
 
@@ -107,5 +118,8 @@ func (o *Operation) GetNamespace(namespace string) (*core.Namespace, error) {
 		Namespace: namespace,
 		Name:      namespace,
 	}, ns)
+	if err != nil {
+		return nil, err
+	}
 	return ns, err
 }
