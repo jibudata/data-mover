@@ -100,9 +100,8 @@ func (o *Operation) MonitorDeleteNamespace(namespace string) error {
 }
 
 func (o *Operation) GetNamespace(namespace string) (*core.Namespace, error) {
-	var err error
-	err = nil
 
+	var err error
 	ns := &core.Namespace{}
 	err = o.client.Get(context.TODO(), k8sclient.ObjectKey{
 		Namespace: namespace,

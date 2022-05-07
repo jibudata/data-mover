@@ -79,14 +79,50 @@ func (l *StagePodList) merge(list ...StagePod) {
 	}
 }
 
+func (o *Operation) getStagePodImage() string {
+
+	var image string = config.StagePodImage
+	podList := &core.PodList{}
+	options := &k8sclient.ListOptions{
+		Namespace: config.VeleroNamespace,
+	}
+	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to list deployment", "namespace", config.VeleroNamespace)
+		return image
+	}
+
+	for _, pod := range podList.Items {
+		if strings.Contains(pod.Name, config.PodNamePrefix) {
+			if len(pod.Spec.Containers) > 0 {
+				image = pod.Spec.Containers[0].Image
+			}
+			break
+		}
+	}
+	if image != config.StagePodImage {
+		o.logger.Info("get data mover pod image", "image", image)
+		return image[:strings.LastIndex(image, "/")+1] + config.StagePodVersion
+	}
+	return image
+}
+
 // backup poc namespace using velero
 func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs string) error {
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: backupNamespace,
 	}
-	_ = o.client.List(context.TODO(), podList, options)
-	stagePods := o.BuildStagePods(&podList.Items, config.StagePodImage, tempNs)
+	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to list pods", "namespace", backupNamespace)
+		return err
+	}
+
+	stagePodImage := o.getStagePodImage()
+	o.logger.Info("get stage pod image", "image", stagePodImage)
+
+	stagePods := o.BuildStagePods(&podList.Items, stagePodImage, tempNs)
 	for _, stagePod := range stagePods {
 		err := o.client.Create(context.TODO(), &stagePod.Pod)
 		if err != nil {
@@ -113,20 +149,21 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	return nil
 }
 
-func (o *Operation) GetStagePodStatus(tempNs string) bool {
+func (o *Operation) GetStagePodStatus(tempNs string) (bool, error) {
 	var running = true
 	podList, err := o.getPodList(tempNs)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	for _, pod := range podList {
 		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
-		if pod.Status.Phase != "Running" {
+		if pod.Status.Phase != core.PodRunning {
 			running = false
+			break
 		}
 	}
-	return running
+	return running, nil
 }
 
 func (o *Operation) GetStagePodState(tempNs string) core.PodPhase {
@@ -159,12 +196,26 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 
 }
 
+func (o *Operation) EnsureStagePodCleaned(ns string) (bool, error) {
+	podList, err := o.getPodList(ns)
+	if err != nil {
+		return false, err
+	}
+	for _, pod := range podList {
+		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // BuildStagePods - creates a list of stage pods from a list of pods
 func (o *Operation) BuildStagePods(podList *[]core.Pod, stagePodImage string, ns string) StagePodList {
 
 	existingPods, _ := o.getPodList(ns)
 	var existingPodMap = make(map[string]bool)
-	if existingPods != nil && len(existingPods) > 0 {
+	if len(existingPods) > 0 {
 		for _, pod := range existingPods {
 			name := pod.Name[len(stagePodNamePrefix):]
 			existingPodMap[name] = true
@@ -211,8 +262,8 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 			},
 			Spec: core.PodSpec{
 				Containers: []core.Container{},
-				NodeName:   pod.Spec.NodeName,
-				Volumes:    pvcVolumes,
+				// NodeName:   pod.Spec.NodeName,
+				Volumes: pvcVolumes,
 			},
 		},
 	}
@@ -303,7 +354,7 @@ func (o *Operation) EnsureStagePodDeleted(ns string) error {
 		if strings.HasPrefix(name, stagePodNamePrefix) {
 			err = o.client.Delete(context.TODO(), &pod)
 			if err != nil {
-				o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", name))
+				o.logger.Error(err, fmt.Sprintf("Failed to delete pod %s", name))
 				return err
 			}
 			o.logger.Info(fmt.Sprintf("Deleted pod %s", name))

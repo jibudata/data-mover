@@ -6,33 +6,49 @@ import (
 	"time"
 
 	core "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (o *Operation) UpdatePVClaimRef(PvName string, namespace string, pvcName string) error {
-	pv := &core.PersistentVolume{}
-	_ = o.client.Get(context.TODO(), k8sclient.ObjectKey{
-		Namespace: namespace,
-		Name:      PvName,
-	}, pv)
-	pv.Spec.ClaimRef = &core.ObjectReference{
-		Name:      pvcName,
-		Namespace: namespace,
-		Kind:      "PersistentVolumeClaim",
-	}
-	err := o.client.Update(context.TODO(), pv)
-	if err != nil {
-		if errors.IsConflict(err) {
-			o.UpdatePVClaimRef(PvName, namespace, pvcName)
-		} else {
-			o.logger.Error(err, "Failed to update pv claimRef", "pv", PvName, "pvc reference", pvcName, "namespace", namespace)
+func (o *Operation) UpdatePvClaimRef(vsrl []*VolumeSnapshotResource, namespace string) error {
+	for _, vsr := range vsrl {
+		pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
+		if err != nil {
+			o.logger.Error(err, "failed to get pvc")
+			return err
+		}
+		err = o.updatePvClaimRef(vsr.PersistentVolumeName, namespace, pvc)
+		if err != nil {
+			o.logger.Error(err, "update pvc claimref failed")
 			return err
 		}
 	}
-	o.logger.Info("successfuly update pv claimRef", "pv", PvName, "pvc reference", pvcName, "namespace", namespace)
+	return nil
+}
+
+func (o *Operation) updatePvClaimRef(PvName string, namespace string, pvc *core.PersistentVolumeClaim) error {
+	pv := &core.PersistentVolume{}
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
+		Namespace: namespace,
+		Name:      PvName,
+	}, pv)
+	if err != nil {
+		return err
+	}
+	pv.Spec.ClaimRef = &core.ObjectReference{
+		Name:      pvc.Name,
+		Namespace: namespace,
+		Kind:      "PersistentVolumeClaim",
+		UID:       pvc.UID,
+	}
+	err = o.client.Update(context.TODO(), pv)
+	if err != nil {
+		o.logger.Error(err, "Failed to update pv claimRef", "pv", PvName, "pvc reference", pvc.Name, "namespace", namespace)
+		return err
+	}
+	o.logger.Info("successfuly update pv claimRef", "pv", PvName, "pvc reference", pvc.Name, "namespace", namespace)
 	return nil
 }
 
@@ -69,7 +85,13 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 		Name:      vsr.PersistentVolumeClaimName,
 	}, pvc)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", backupNs))
+		o.logger.Error(err, fmt.Sprintf("failed to get pvc in namespace %s", backupNs))
+		return err
+	}
+
+	vs, err := o.GetVolumeSnapshot(vsr.VolumeSnapshotName, tgtNs)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("failed to get vs in namespace %s", backupNs))
 		return err
 	}
 
@@ -86,14 +108,26 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 				Kind:     "VolumeSnapshot",
 				APIGroup: &apiGroup,
 			},
-			AccessModes: []core.PersistentVolumeAccessMode{
-				"ReadWriteOnce",
-			},
-			Resources: core.ResourceRequirements{
-				Requests: pvc.Spec.Resources.Requests,
-			},
+			AccessModes: pvc.Spec.AccessModes,
+			Resources:   pvc.Spec.Resources,
+			Selector:    pvc.Spec.Selector,
 		},
 	}
+
+	storageReq, exists := newPvc.Spec.Resources.Requests[core.ResourceStorage]
+
+	// It is possible that the volume provider allocated a larger capacity volume than what was requested in the backed up PVC.
+	// In this scenario the volumesnapshot of the PVC will endup being larger than its requested storage size.
+	// Such a PVC, on restore as-is, will be stuck attempting to use a Volumesnapshot as a data source for a PVC that
+	// is not large enough.
+	// To counter that, here we set the storage request on the PVC to the larger of the PVC's storage request and the size of the
+	// VolumeSnapshot
+	if vs.Status != nil &&
+		vs.Status.RestoreSize != nil &&
+		(!exists || vs.Status.RestoreSize.Cmp(storageReq) > 0) {
+		newPvc.Spec.Resources.Requests[core.ResourceStorage] = *vs.Status.RestoreSize
+	}
+
 	err = o.client.Create(context.TODO(), newPvc)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to create pvc in namespace %s", tgtNs))
@@ -106,7 +140,7 @@ func (o *Operation) CreatePvcWithVs(vsr *VolumeSnapshotResource, backupNs string
 // Create pod with pvc
 func (o *Operation) CreatePvcsWithPv(vsrl []*VolumeSnapshotResource, backupNs string, tgtNs string) error {
 	for _, vsr := range vsrl {
-		err := o.CreatePvcWithPv(vsr, tgtNs)
+		err := o.CreatePvcWithPv(vsr, backupNs, tgtNs)
 		if err != nil {
 			return err
 		}
@@ -139,114 +173,172 @@ func (o *Operation) isPvcDeleted(name string, namespace string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	deleted, err := o.isPvcDeleted(name, namespace)
-	if err == nil && !deleted {
-		time.Sleep(time.Duration(2) * time.Second)
-		deleted, err = o.isPvcDeleted(name, namespace)
+	return false, nil
+}
+
+func (o *Operation) IsPvcDeleted(vsrl []*VolumeSnapshotResource, namespace string) (bool, error) {
+	for _, vsr := range vsrl {
+		deleted, err := o.isPvcDeleted(vsr.PersistentVolumeClaimName, namespace)
+		if err != nil {
+			return false, err
+		}
+		if !deleted {
+			return false, fmt.Errorf("pvc still exists")
+		}
 	}
 	return true, nil
 }
 
-// Create pod with pvc
-func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace string) error {
-	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
-	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
-		return err
-	}
+func (o *Operation) UpdatePvClaimRetain(vsrl []*VolumeSnapshotResource, namespace string) error {
+	return o.updatePvClaimPolicy(vsrl, namespace, core.PersistentVolumeReclaimRetain)
+}
 
-	// pvc already created using pv
-	if pvc.Spec.DataSource == nil && pvc.Spec.VolumeName != "" {
-		return nil
-	}
+func (o *Operation) UpdatePvClaimDelete(vsrl []*VolumeSnapshotResource, namespace string) error {
+	return o.updatePvClaimPolicy(vsrl, namespace, core.PersistentVolumeReclaimDelete)
+}
 
-	if pvc.Spec.VolumeName == "" {
-		time.Sleep(time.Duration(5) * time.Second)
-		pvc, err = o.getPvc(vsr.PersistentVolumeClaimName, namespace)
+func (o *Operation) updatePvClaimPolicy(vsrl []*VolumeSnapshotResource, namespace string, policy core.PersistentVolumeReclaimPolicy) error {
+	for _, vsr := range vsrl {
+		pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, namespace)
 		if err != nil {
 			o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
 			return err
 		}
-	}
-	pvName := pvc.Spec.VolumeName
-	o.logger.Info(fmt.Sprintf("Get pvc %s and pv %s", vsr.PersistentVolumeClaimName, pvName))
+		pvName := pvc.Spec.VolumeName
+		o.logger.Info(fmt.Sprintf("Get pvc %s and pv %s", vsr.PersistentVolumeClaimName, pvName))
 
-	// patch the pv to Retain
-	patch := []byte(`{"spec":{"persistentVolumeReclaimPolicy": "Retain"}}`)
-	err = o.client.Patch(context.TODO(), &core.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      pvName,
-		},
-	}, k8sclient.RawPatch(types.MergePatchType, patch))
+		// patch the pv to Retain
+		err = o.updatePVClaimPolicy(pvName, policy)
+		if err != nil {
+			o.logger.Error(err, "Failed to patch pv to retain")
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operation) DeletePvc(vsrl []*VolumeSnapshotResource, namespace string) error {
+
+	for _, vsr := range vsrl {
+		err := o.deletePvc(vsr.PersistentVolumeClaimName, namespace)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operation) deletePvc(pvcName string, namespace string) error {
+	pvc, err := o.getPvc(pvcName, namespace)
 	if err != nil {
-		o.logger.Error(err, "Failed to patch pv to retain")
+		o.logger.Error(err, fmt.Sprintf("Failed to get pvc in namespace %s", namespace))
 		return err
 	}
-	o.logger.Info(fmt.Sprintf("Patch pv %s with retain option", pvName))
-	time.Sleep(time.Duration(2) * time.Second)
-
-	// delete pvc
 	err = o.client.Delete(context.TODO(), pvc)
 	if err != nil {
 		o.logger.Error(err, fmt.Sprintf("Failed to delete pvc %s", pvc.Name))
 		return err
 	}
-	_, err = o.isPvcDeleted(vsr.PersistentVolumeClaimName, namespace)
-	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("delete pvc %s failure", pvc.Name))
-	}
-	o.logger.Info(fmt.Sprintf("Deleted pvc %s", pvc.Name))
+	return nil
+}
 
-	// update pv with new claimRef
-	err = o.UpdatePVClaimRef(pvName, namespace, vsr.PersistentVolumeClaimName)
+func (o *Operation) EnsurePvcDeleted(namespace string) (bool, error) {
+
+	pvcList, err := o.getPvcList(namespace)
 	if err != nil {
+		return false, err
+	}
+	if len(pvcList) > 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (o *Operation) getPvcList(namespace string) ([]core.PersistentVolumeClaim, error) {
+
+	pvcList := &core.PersistentVolumeClaimList{}
+	options := &k8sclient.ListOptions{
+		Namespace: namespace,
+	}
+	err := o.client.List(context.TODO(), pvcList, options)
+	if err != nil {
+		return nil, err
+	}
+	return pvcList.Items, nil
+
+}
+
+// Create pod with pvc
+func (o *Operation) CreatePvcWithPv(vsr *VolumeSnapshotResource, namespace, tgtNamespace string) error {
+	var err error
+	pvc, err := o.getPvc(vsr.PersistentVolumeClaimName, tgtNamespace)
+	if err == nil && pvc.Spec.VolumeName == vsr.PersistentVolumeName {
+		return nil
+	}
+
+	pvc, err = o.getPvc(vsr.PersistentVolumeClaimName, namespace)
+	if err != nil {
+		return err
+	}
+
+	vs, err := o.GetVolumeSnapshot(vsr.VolumeSnapshotName, tgtNamespace)
+	if err != nil {
+		o.logger.Error(err, fmt.Sprintf("failed to get vs in namespace %s", tgtNamespace))
 		return err
 	}
 
 	// create pvc with volume
 	newPvc := &core.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
+			Namespace: tgtNamespace,
 			Name:      vsr.PersistentVolumeClaimName,
 		},
 		Spec: core.PersistentVolumeClaimSpec{
 			StorageClassName: pvc.Spec.StorageClassName,
-			AccessModes: []core.PersistentVolumeAccessMode{
-				"ReadWriteOnce",
-			},
-			Resources: core.ResourceRequirements{
-				Requests: pvc.Spec.Resources.Requests,
-			},
-			VolumeName: pvc.Spec.VolumeName,
+			AccessModes:      pvc.Spec.AccessModes,
+			Resources:        pvc.Spec.Resources,
+			VolumeName:       vsr.PersistentVolumeName,
+			Selector:         pvc.Spec.Selector,
 		},
 	}
+	storageReq, exists := newPvc.Spec.Resources.Requests[core.ResourceStorage]
+
+	// It is possible that the volume provider allocated a larger capacity volume than what was requested in the backed up PVC.
+	// In this scenario the volumesnapshot of the PVC will endup being larger than its requested storage size.
+	// Such a PVC, on restore as-is, will be stuck attempting to use a Volumesnapshot as a data source for a PVC that
+	// is not large enough.
+	// To counter that, here we set the storage request on the PVC to the larger of the PVC's storage request and the size of the
+	// VolumeSnapshot
+	if vs.Status != nil &&
+		vs.Status.RestoreSize != nil &&
+		(!exists || vs.Status.RestoreSize.Cmp(storageReq) > 0) {
+		newPvc.Spec.Resources.Requests[core.ResourceStorage] = *vs.Status.RestoreSize
+	}
+
 	err = o.createPvc(newPvc)
 	if err != nil {
 		o.logger.Error(err, "Failed to create PVC", "name", newPvc.Name)
 		return err
 	}
-	o.logger.Info(fmt.Sprintf("Create pvc %s in %s with pv %s", vsr.PersistentVolumeClaimName, namespace, pvName))
+	o.logger.Info(fmt.Sprintf("Create pvc %s in %s with pv %s", vsr.PersistentVolumeClaimName, namespace, vsr.PersistentVolumeName))
 
-	err = o.isPVCReady(namespace, vsr.PersistentVolumeClaimName)
+	return nil
+}
+
+func (o *Operation) updatePVClaimPolicy(pvName string, policy core.PersistentVolumeReclaimPolicy) error {
+
+	pv := &core.PersistentVolume{}
+	err := o.client.Get(context.TODO(), k8sclient.ObjectKey{Name: pvName}, pv)
 	if err != nil {
-		o.logger.Error(err, "Get pvc failure")
+		o.logger.Error(err, "failed to get pv")
 		return err
 	}
-
-	// patch the pv to Delete
-	patch = []byte(`{"spec": {"persistentVolumeReclaimPolicy": "Delete"}}`)
-	err = o.client.Patch(context.TODO(), &core.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      pvName,
-		},
-	}, k8sclient.RawPatch(types.MergePatchType, patch))
+	pv.Spec.PersistentVolumeReclaimPolicy = policy
+	err = o.client.Update(context.TODO(), pv)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to patch pv %s with delete option", pvName))
+		o.logger.Error(err, "failed to update pv policy", "new policy", policy)
 		return err
 	}
-	o.logger.Info(fmt.Sprintf("Patch pv %s with delete option \n", pvName))
 	return nil
 }
 
@@ -277,6 +369,52 @@ func (o *Operation) isPVCReady(namespace string, PersistentVolumeClaimName strin
 		err = o.isPVCReady(namespace, PersistentVolumeClaimName)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operation) CheckPVCReady(namespace string, vsrl []*VolumeSnapshotResource) (bool, error) {
+	for _, vsr := range vsrl {
+		pvc := &core.PersistentVolumeClaim{}
+		err := o.client.Get(context.TODO(), k8sclient.ObjectKey{
+			Namespace: namespace,
+			Name:      vsr.PersistentVolumeClaimName,
+		}, pvc)
+		if err != nil {
+			return false, err
+		}
+
+		if pvc.Status.Phase != core.ClaimBound {
+			o.logger.Info("pvc is not Bound", "pvc", pvc.Name)
+			return false, nil
+		}
+		vsr.PersistentVolumeName = pvc.Spec.VolumeName
+	}
+
+	return true, nil
+}
+
+func (o *Operation) ClearPVs(namespaces []string) error {
+
+	var err error
+	pvList := &core.PersistentVolumeList{}
+	options := &k8sclient.ListOptions{}
+	err = o.client.List(context.TODO(), pvList, options)
+	if err != nil {
+		o.logger.Error(err, "failed to get pv list")
+		return err
+	}
+	for _, pv := range pvList.Items {
+		for _, namespace := range namespaces {
+			if pv.Spec.ClaimRef.Namespace == namespace {
+				err = o.client.Delete(context.TODO(), &pv)
+				if err != nil {
+					o.logger.Error(err, "failed to delete pv", "name", pv.Name)
+					return err
+				}
+				break
+			}
 		}
 	}
 	return nil

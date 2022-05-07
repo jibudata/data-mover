@@ -8,6 +8,7 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.10.2
 	github.com/vmware-tanzu/velero v1.7.0
+	go.uber.org/zap v1.15.0
 	k8s.io/api v0.20.9
 	k8s.io/apimachinery v0.20.9
 	k8s.io/client-go v0.20.9

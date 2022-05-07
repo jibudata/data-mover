@@ -588,7 +588,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:latest
+        image: registry.cn-shanghai.aliyuncs.com/jibudata/data-mover:v1.0.0
         imagePullPolicy: Always
         name: manager
         resources:
