@@ -10,7 +10,9 @@ import (
 	"time"
 
 	config "github.com/jibudata/data-mover/pkg/config"
+	"github.com/jibudata/data-mover/pkg/util"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,8 +117,9 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	}
 	err := o.client.List(context.TODO(), podList, options)
 	if err != nil {
-		o.logger.Error(err, "failed to list pods", "namespace", backupNamespace)
-		return err
+		msg := fmt.Sprintf("failed to list pods for namespace %s", backupNamespace)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 
 	stagePodImage := o.getStagePodImage()
@@ -124,10 +127,12 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 
 	stagePods := o.BuildStagePods(&podList.Items, stagePodImage, tempNs)
 	for _, stagePod := range stagePods {
+		podName := stagePod.Pod.Name
 		err := o.client.Create(context.TODO(), &stagePod.Pod)
 		if err != nil {
-			o.logger.Error(err, fmt.Sprintf("Failed to create pod %s", stagePod.Pod.Name))
-			return err
+			msg := fmt.Sprintf("failed to create pod %s in namespace %s", podName, tempNs)
+			o.logger.Error(err, msg)
+			return util.WrapError(msg, err)
 		}
 	}
 	running := false
@@ -149,8 +154,8 @@ func (o *Operation) BuildStagePod(backupNamespace string, wait bool, tempNs stri
 	return nil
 }
 
-func (o *Operation) GetStagePodStatus(tempNs string) (bool, error) {
-	var running = true
+func (o *Operation) GetStagePodRunningStatus(tempNs string) (bool, error) {
+
 	podList, err := o.getPodList(tempNs)
 	if err != nil {
 		return false, err
@@ -159,11 +164,10 @@ func (o *Operation) GetStagePodStatus(tempNs string) (bool, error) {
 	for _, pod := range podList {
 		o.logger.Info(fmt.Sprintf("Pod %s status %s", pod.Name, pod.Status.Phase))
 		if pod.Status.Phase != core.PodRunning {
-			running = false
-			break
+			return false, fmt.Errorf("pod %s is not running in namespace %s, status is %s", pod.Name, tempNs, pod.Status.Phase)
 		}
 	}
-	return running, nil
+	return true, nil
 }
 
 func (o *Operation) GetStagePodState(tempNs string) core.PodPhase {
@@ -192,6 +196,11 @@ func (o *Operation) getPodList(ns string) ([]core.Pod, error) {
 	}
 	podList := &core.PodList{}
 	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		msg := fmt.Sprintf("list pod err for namespace %s", ns)
+		o.logger.Error(err, msg)
+		err = util.WrapError(msg, err)
+	}
 	return podList.Items, err
 
 }
@@ -203,7 +212,7 @@ func (o *Operation) EnsureStagePodCleaned(ns string) (bool, error) {
 	}
 	for _, pod := range podList {
 		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
-			return false, nil
+			return false, fmt.Errorf("pod %s still exists in %s, status %s", pod.Name, ns, pod.Status.Phase)
 		}
 	}
 
@@ -313,20 +322,25 @@ func (o *Operation) BuildStagePodFromPod(ref k8sclient.ObjectKey, pod *core.Pod,
 
 // delete pod
 
-func (o *Operation) IsStagePodDeleted(ns string) bool {
+func (o *Operation) IsStagePodDeleted(ns string) (bool, error) {
 	var running = false
 	podList := &core.PodList{}
 	options := &k8sclient.ListOptions{
 		Namespace: ns,
 	}
-	_ = o.client.List(context.TODO(), podList, options)
+	err := o.client.List(context.TODO(), podList, options)
+	if err != nil {
+		msg := fmt.Sprintf("list pod err for namespace %s", ns)
+		o.logger.Error(err, msg)
+		return false, util.WrapError(msg, err)
+	}
 	for _, pod := range podList.Items {
 		if strings.HasPrefix(pod.Name, stagePodNamePrefix) {
 			running = true
 			break
 		}
 	}
-	return !running
+	return !running, nil
 }
 
 func (o *Operation) SyncDeleteStagePod(ns string) error {
@@ -334,7 +348,7 @@ func (o *Operation) SyncDeleteStagePod(ns string) error {
 	var running = true
 	for running {
 		time.Sleep(time.Duration(5) * time.Second)
-		running = o.IsStagePodDeleted(ns)
+		running, _ = o.IsStagePodDeleted(ns)
 	}
 	return nil
 }
@@ -346,16 +360,18 @@ func (o *Operation) EnsureStagePodDeleted(ns string) error {
 	}
 	err := o.client.List(context.TODO(), podList, options)
 	if err != nil {
-		o.logger.Error(err, fmt.Sprintf("Failed to get pod list in namespace %s", ns))
-		return err
+		msg := fmt.Sprintf("failed to get pod list in namespace %s", ns)
+		o.logger.Error(err, msg)
+		return util.WrapError(msg, err)
 	}
 	for _, pod := range podList.Items {
 		var name = pod.Name
 		if strings.HasPrefix(name, stagePodNamePrefix) {
 			err = o.client.Delete(context.TODO(), &pod)
-			if err != nil {
-				o.logger.Error(err, fmt.Sprintf("Failed to delete pod %s", name))
-				return err
+			if err != nil && !errors.IsNotFound(err) {
+				msg := fmt.Sprintf("Failed to delete pod %s namespace %s", name, ns)
+				o.logger.Error(err, msg)
+				return util.WrapError(msg, err)
 			}
 			o.logger.Info(fmt.Sprintf("Deleted pod %s", name))
 		}

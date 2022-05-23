@@ -284,9 +284,9 @@ func (r *VeleroImportReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if veleroImport.Status.Phase == dmapi.PhaseDeletingStagePod {
 		logger.Info("Check pod deletion status ...")
 		for _, tgtNamespace := range namespaceMapping {
-			deleted := handler.IsStagePodDeleted(tgtNamespace)
-			if !deleted {
-				r.UpdateStatus(ctx, veleroImport, nil, fmt.Errorf("stage pod still exists"))
+			_, err := handler.EnsureStagePodCleaned(tgtNamespace)
+			if err != nil {
+				r.UpdateStatus(ctx, veleroImport, nil, err)
 				return ctrl.Result{RequeueAfter: requeueAfterFast}, err
 			} else {
 				err = r.UpdateStatus(ctx, veleroImport, nil, nil)

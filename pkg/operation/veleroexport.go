@@ -2,9 +2,11 @@ package operation
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	dmapi "github.com/jibudata/data-mover/api/v1alpha1"
+	"github.com/jibudata/data-mover/pkg/util"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -51,7 +53,9 @@ func (o *Operation) ListVeleroExport(namespace string) ([]dmapi.VeleroExport, er
 		},
 	)
 	if err != nil {
-		return nil, err
+		msg := fmt.Sprintf("failed to list velero export in namespace %s", namespace)
+		o.logger.Error(err, msg)
+		return nil, util.WrapError(msg, err)
 	}
 	return exportList.Items, err
 }
